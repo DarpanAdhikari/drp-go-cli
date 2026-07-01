@@ -147,9 +147,9 @@ func (e *Engine) Fresh(dryRun bool) error {
 		return nil
 	}
 
-	// Drop and recreate schema_history, then run all up migrations.
-	if _, err := e.DB.Exec(`DROP TABLE IF EXISTS schema_history`); err != nil {
-		return fmt.Errorf("migration: fresh — dropping schema_history: %w", err)
+	// Drop all user tables (including schema_history and seed_history), then run all up migrations.
+	if err := drpdb.DropAllTables(e.DB, e.DriverName); err != nil {
+		return fmt.Errorf("migration: fresh — dropping all tables: %w", err)
 	}
 	if err := drpdb.EnsureSchemaHistoryTable(e.DB, e.DriverName); err != nil {
 		return err

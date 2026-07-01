@@ -3,6 +3,8 @@ package db
 import (
 	"database/sql"
 	"fmt"
+
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 // DropAllTables drops every user-created table in the database in a single
@@ -66,6 +68,11 @@ func dropAllPostgres(db *sql.DB) error {
 	if _, err := db.Exec(stmt); err != nil {
 		return fmt.Errorf("db:drop: dropping tables: %w", err)
 	}
+
+	for _, t := range tables {
+		output.Success("Dropped table: %s", t)
+	}
+
 	return nil
 }
 
@@ -96,8 +103,10 @@ func dropAllMySQL(db *sql.DB) error {
 
 	for _, t := range tables {
 		if _, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", t)); err != nil {
+			output.Fail("Failed to drop table: %s", t)
 			return fmt.Errorf("db:drop: dropping table %q: %w", t, err)
 		}
+		output.Success("Dropped table: %s", t)
 	}
 
 	return nil

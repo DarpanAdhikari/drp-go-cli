@@ -167,7 +167,8 @@ var migrateSeedCmd = &cobra.Command{
 		if err := runMigrateUp(c, nil); err != nil {
 			return err
 		}
-		return runSeeders(false)
+		fresh, _ := c.Flags().GetBool("fresh")
+		return runSeeders(fresh)
 	},
 }
 
@@ -205,4 +206,5 @@ func init() {
 	migrateRollbackCmd.Flags().Bool("dry-run", false, "Print what would be rolled back without executing")
 	migrateDownCmd.Flags().Bool("dry-run", false, "Print what would be stepped down without executing")
 	migrateFreshCmd.Flags().Bool("dry-run", false, "Print what would be dropped/applied without executing")
+	migrateSeedCmd.Flags().Bool("fresh", false, "Clear seed history and re-run all seeders")
 }
