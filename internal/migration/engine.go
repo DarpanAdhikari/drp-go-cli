@@ -6,6 +6,7 @@ import (
 	"os"
 
 	drpdb "github.com/DarpanAdhikari/drp-go-cli/internal/db"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 // Engine runs migrations against a database, recording state in
@@ -202,10 +203,29 @@ func (e *Engine) runFile(path, identifier string, batch int, dir direction) erro
 		return fmt.Errorf("migration: reading %q: %w", path, err)
 	}
 
-	if e.TransactionalDDL {
-		return e.runInTransaction(string(sql), identifier, batch, dir)
+	if dir == directionUp {
+		output.Info("Migrating: %s", identifier)
+	} else {
+		output.Info("Rolling back: %s", identifier)
 	}
-	return e.runDirect(string(sql), identifier, batch, dir)
+
+	var runErr error
+	if e.TransactionalDDL {
+		runErr = e.runInTransaction(string(sql), identifier, batch, dir)
+	} else {
+		runErr = e.runDirect(string(sql), identifier, batch, dir)
+	}
+
+	if runErr != nil {
+		return runErr
+	}
+
+	if dir == directionUp {
+		output.Success("Migrated:  %s", identifier)
+	} else {
+		output.Success("Rolled back: %s", identifier)
+	}
+	return nil
 }
 
 // runInTransaction wraps a migration file's SQL in a transaction (Postgres).
