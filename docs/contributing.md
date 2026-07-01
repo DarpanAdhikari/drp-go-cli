@@ -22,7 +22,7 @@ standards, how to set up a development environment, and the PR process.
 
 ```bash
 # 1. Fork and clone the repository
-git clone https://github.com/yourorg/drp.git
+git clone https://github.com/DarpanAdhikari/drp-go-cli.git
 cd drp
 
 # 2. Install Go (1.22 or later)
