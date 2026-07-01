@@ -4,10 +4,10 @@ import (
 	"errors"
 
 	"github.com/spf13/cobra"
-	"github.com/yourorg/drp/internal/config"
-	"github.com/yourorg/drp/internal/db"
-	"github.com/yourorg/drp/internal/migration"
-	"github.com/yourorg/drp/internal/output"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/config"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/db"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/migration"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 // migrationsDir is the conventional migrations directory inside a drp project.

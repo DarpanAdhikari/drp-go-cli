@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	drpdb "github.com/yourorg/drp/internal/db"
+	drpdb "github.com/DarpanAdhikari/drp-go-cli/internal/db"
 )
 
 // Engine runs migrations against a database, recording state in

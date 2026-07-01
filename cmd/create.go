@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/yourorg/drp/internal/generator"
-	"github.com/yourorg/drp/internal/output"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/generator"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 var createCrudCmd = &cobra.Command{

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/yourorg/drp/internal/generator/embedded"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/generator/embedded"
 )
 
 // Renderer resolves and executes templates with a single, consistent

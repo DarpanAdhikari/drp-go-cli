@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is set at build time via -ldflags "-X github.com/yourorg/drp/cmd.Version=..."
+// Version is set at build time via -ldflags "-X github.com/DarpanAdhikari/drp-go-cli/cmd.Version=..."
 var Version = "dev"
 
 var versionCmd = &cobra.Command{

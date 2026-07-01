@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/yourorg/drp/internal/output"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 // globalEnvFile is the path to the .env file, set via --env-file flag.

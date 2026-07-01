@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yourorg/drp/internal/config"
-	"github.com/yourorg/drp/internal/db/driver"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/config"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/db/driver"
 )
 
 // Connection bundles an open *sql.DB with its resolved Driver so callers

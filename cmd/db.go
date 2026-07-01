@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yourorg/drp/internal/config"
-	"github.com/yourorg/drp/internal/db"
-	"github.com/yourorg/drp/internal/output"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/config"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/db"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 var dbTablesCmd = &cobra.Command{

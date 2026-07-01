@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/yourorg/drp/internal/config"
-	"github.com/yourorg/drp/internal/db"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/config"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/db"
 )
 
 // Result holds the outcome of a single doctor check.

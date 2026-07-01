@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	drpdb "github.com/yourorg/drp/internal/db"
+	drpdb "github.com/DarpanAdhikari/drp-go-cli/internal/db"
 )
 
 // Engine runs seeder files against a database, tracking which seeders have

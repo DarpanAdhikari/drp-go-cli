@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yourorg/drp/internal/doctor"
-	"github.com/yourorg/drp/internal/output"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/doctor"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 var doctorCmd = &cobra.Command{
