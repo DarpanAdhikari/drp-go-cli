@@ -19,7 +19,7 @@ DRP is distributed as a single binary. You have two options:
 ### Option A — Build from source (recommended while in early development)
 
 ```bash
-git clone https://github.com/yourorg/drp.git
+git clone https://github.com/DarpanAdhikari/drp-go-cli.git
 cd drp
 go build -o drp .
 sudo mv drp /usr/local/bin/drp   # make it available system-wide
@@ -35,7 +35,7 @@ drp --help
 ### Option B — `go install` (once published)
 
 ```bash
-go install github.com/yourorg/drp@latest
+go install github.com/DarpanAdhikari/drp-go-cli@latest
 ```
 
 > **Note:** `drp` does **not** need to be imported into your project. It is a
