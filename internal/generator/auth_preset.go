@@ -128,6 +128,8 @@ func getenvInt(key string, fallback int) int {
 		filepath.Join("internal", "repositories", "user_repository.go"):         authUserRepositoryGo(mod),
 		filepath.Join("internal", "services", "user_service.go"):                authUserServiceGo(mod),
 		filepath.Join("internal", "handlers", "auth_handler.go"):                authHandlerGo(mod),
+		filepath.Join("internal", "handlers", "user_handler.go"):                authUserHandlerGo(mod),
+		filepath.Join("internal", "handlers", "helpers.go"):                     authHandlerHelpersGo(),
 		filepath.Join("internal", "routes", "routes.go"):                        authRoutesGo(mod),
 		filepath.Join("database", "migrations", "000001_create_users.up.sql"):   authUsersMigrationUp(),
 		filepath.Join("database", "migrations", "000001_create_users.down.sql"): "DROP TABLE IF EXISTS user_tokens;\nDROP TABLE IF EXISTS users;\n",
@@ -657,17 +659,20 @@ import (
 	"%s/internal/services"
 )
 
+// AuthHandler handles authentication-related HTTP requests.
 type AuthHandler struct {
 	users *services.UserService
-	cfg *config.Config
+	cfg   *config.Config
 	tokenStore *auth.TokenStore
 }
 
+// NewAuthHandler constructs a new AuthHandler.
 func NewAuthHandler(db *sql.DB, cfg *config.Config) *AuthHandler {
 	repo := repositories.NewUserRepository(db)
 	return &AuthHandler{users: services.NewUserService(repo), cfg: cfg, tokenStore: auth.NewTokenStore(db)}
 }
 
+// Register handles POST /auth/register
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
 	if !decodeJSON(w, r, &req) {
@@ -681,6 +686,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"user": user.Response()})
 }
 
+// Login handles POST /auth/login
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
 	if !decodeJSON(w, r, &req) {
@@ -703,6 +709,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokens)
 }
 
+// Refresh handles POST /auth/refresh
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req models.RefreshRequest
 	if !decodeJSON(w, r, &req) {
@@ -737,6 +744,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokens)
 }
 
+// Logout handles POST /auth/logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if jti, ok := middleware.TokenJTI(r); ok {
 		_ = h.tokenStore.RevokeJTI(jti)
@@ -750,7 +758,43 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "logout successful"})
 }
 
-func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) storeTokenPair(r *http.Request, tokens *auth.TokenPair, accessClaims, refreshClaims *auth.Claims) error {
+	ipAddress := r.RemoteAddr
+	userAgent := r.UserAgent()
+	if err := h.tokenStore.Store(accessClaims, auth.HashToken(tokens.AccessToken), ipAddress, userAgent); err != nil {
+		return err
+	}
+	return h.tokenStore.Store(refreshClaims, auth.HashToken(tokens.RefreshToken), ipAddress, userAgent)
+}
+`, mod, mod, mod, mod, mod, mod)
+}
+
+func authUserHandlerGo(mod string) string {
+	return fmt.Sprintf(`package handlers
+
+import (
+	"net/http"
+
+	"%s/internal/middleware"
+	"%s/internal/repositories"
+	"%s/internal/services"
+
+	"database/sql"
+)
+
+// UserHandler handles user-related HTTP requests.
+type UserHandler struct {
+	users *services.UserService
+}
+
+// NewUserHandler constructs a new UserHandler.
+func NewUserHandler(db *sql.DB) *UserHandler {
+	repo := repositories.NewUserRepository(db)
+	return &UserHandler{users: services.NewUserService(repo)}
+}
+
+// Me handles GET /me — returns the authenticated user's profile.
+func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
 	id, ok := middleware.UserID(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "authorization required")
@@ -763,16 +807,19 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, user.Response())
 }
-
-func (h *AuthHandler) storeTokenPair(r *http.Request, tokens *auth.TokenPair, accessClaims, refreshClaims *auth.Claims) error {
-	ipAddress := r.RemoteAddr
-	userAgent := r.UserAgent()
-	if err := h.tokenStore.Store(accessClaims, auth.HashToken(tokens.AccessToken), ipAddress, userAgent); err != nil {
-		return err
-	}
-	return h.tokenStore.Store(refreshClaims, auth.HashToken(tokens.RefreshToken), ipAddress, userAgent)
+`, mod, mod, mod)
 }
 
+func authHandlerHelpersGo() string {
+	return `package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+// decodeJSON decodes the JSON request body into dest.
+// It writes a 400 error and returns false on failure.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(dest); err != nil {
@@ -782,16 +829,18 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
 	return true
 }
 
+// writeJSON encodes v as JSON and writes it with the given HTTP status.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError writes a JSON error response.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
-`, mod, mod, mod, mod, mod, mod)
+`
 }
 
 func authRoutesGo(mod string) string {
@@ -808,12 +857,16 @@ import (
 
 func Register(mux *http.ServeMux, db *sql.DB, cfg *config.Config) {
 	authHandler := handlers.NewAuthHandler(db, cfg)
+	userHandler := handlers.NewUserHandler(db)
 
+	// Auth routes
 	mux.HandleFunc("POST /auth/register", authHandler.Register)
 	mux.HandleFunc("POST /auth/login", authHandler.Login)
 	mux.HandleFunc("POST /auth/refresh", authHandler.Refresh)
 	mux.Handle("POST /auth/logout", middleware.Auth(cfg, db, http.HandlerFunc(authHandler.Logout)))
-	mux.Handle("GET /me", middleware.Auth(cfg, db, http.HandlerFunc(authHandler.Me)))
+
+	// User routes
+	mux.Handle("GET /me", middleware.Auth(cfg, db, http.HandlerFunc(userHandler.Me)))
 }
 `, mod, mod, mod)
 }
