@@ -1,0 +1,5 @@
+a1d857d402ca90bc6733741747ea4c763da7e6b851faf9d7495f72ebf6336abf  drp_v0.1.0_darwin_amd64.tar.gz
+9a70839af66e8f509b95519875e453cb57fafe34910c673ecb13f0e1c02d4dac  drp_v0.1.0_darwin_arm64.tar.gz
+db235f59ad8fd2e2deb53ce3621444da4e7ad530d47b96805bc5ffdb501e9ba8  drp_v0.1.0_linux_amd64.tar.gz
+8eeada0e92649c18f0fcb7af4a18dcaf7d07206a1bb83712e06cf0393d2609f7  drp_v0.1.0_linux_arm64.tar.gz
+97209cc0148d84a4fc38afea9bd860cc9d06ad46093363cb4729348de143ff59  drp_v0.1.0_windows_amd64.zip
