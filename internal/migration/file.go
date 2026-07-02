@@ -9,30 +9,30 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // filePattern matches migration file names in the form:
-// 20060102150405_some_migration_name.up.sql
-// 20060102150405_some_migration_name.down.sql
-var filePattern = regexp.MustCompile(`^(\d{14})_([a-z0-9_]+)\.(up|down)\.sql$`)
-
-// timestampLayout is the layout used for migration timestamps.
-const timestampLayout = "20060102150405"
+// <digits>_some_migration_name.up.sql
+// <digits>_some_migration_name.down.sql
+// Supports arbitrary digit length (e.g. 14 for legacy, 16 for microsecond).
+var filePattern = regexp.MustCompile(`^(\d+)_([a-z0-9_]+)\.(up|down)\.sql$`)
 
 // File represents a discovered migration on disk.
 type File struct {
-	Timestamp time.Time
+	Timestamp int64
+
 	Name      string // e.g. "create_users_table"
 	UpPath    string // absolute path to the .up.sql file
 	DownPath  string // absolute path to the .down.sql file (may be empty warning)
 }
 
 // Identifier returns the canonical migration ID stored in schema_history,
-// e.g. "20240115120000_create_users_table".
+// e.g. "1719929853123456_create_users_table".
 func (f File) Identifier() string {
-	return fmt.Sprintf("%s_%s", f.Timestamp.Format(timestampLayout), f.Name)
+	return fmt.Sprintf("%d_%s", f.Timestamp, f.Name)
 }
 
 // DiscoverFiles scans dir and returns all migration File entries sorted by
@@ -48,7 +48,7 @@ func DiscoverFiles(dir string) ([]File, error) {
 	}
 
 	type half struct {
-		ts   time.Time
+		ts   int64
 		name string
 		up   string
 		down string
@@ -64,9 +64,9 @@ func DiscoverFiles(dir string) ([]File, error) {
 			continue // skip files that don't match the naming convention
 		}
 
-		ts, err := time.ParseInLocation(timestampLayout, m[1], time.UTC)
+		ts, err := strconv.ParseInt(m[1], 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("migration: invalid timestamp in %q: %w", e.Name(), err)
+			return nil, fmt.Errorf("migration: invalid timestamp %q: %w", m[1], err)
 		}
 
 		key := m[1] + "_" + m[2]
@@ -99,7 +99,7 @@ func DiscoverFiles(dir string) ([]File, error) {
 	}
 
 	sort.Slice(files, func(i, j int) bool {
-		return files[i].Timestamp.Before(files[j].Timestamp)
+		return files[i].Timestamp < files[j].Timestamp
 	})
 	return files, nil
 }
@@ -108,15 +108,25 @@ func DiscoverFiles(dir string) ([]File, error) {
 // Returns an error if a migration with the same timestamp-and-name already
 // exists (collision guard — callers should not generate two in the same second).
 func NewFile(dir, name string) (File, error) {
+	return NewFileForTable(dir, name, "")
+}
+
+// NewFileForTable creates a new migration pair with starter table SQL. If
+// tableName is empty, the table name is inferred from common migration names.
+func NewFileForTable(dir, name, tableName string) (File, error) {
 	// Sanitise name: lowercase, spaces → underscores, strip anything non-alnum.
 	name = strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 	name = regexp.MustCompile(`[^a-z0-9_]`).ReplaceAllString(name, "")
 	if name == "" {
 		return File{}, fmt.Errorf("migration: name %q is invalid after sanitisation", name)
 	}
+	tableName = sanitizeIdentifier(tableName)
+	if tableName == "" {
+		tableName = inferTableName(name)
+	}
 
-	ts := time.Now().UTC()
-	base := fmt.Sprintf("%s_%s", ts.Format(timestampLayout), name)
+	ts := time.Now().UnixMicro()
+	base := fmt.Sprintf("%d_%s", ts, name)
 	upPath := filepath.Join(dir, base+".up.sql")
 	downPath := filepath.Join(dir, base+".down.sql")
 
@@ -128,8 +138,8 @@ func NewFile(dir, name string) (File, error) {
 		return File{}, fmt.Errorf("migration: creating directory %q: %w", dir, err)
 	}
 
-	upContent := fmt.Sprintf("-- Migration: %s (up)\n-- TODO: write your UP migration SQL here\n", base)
-	downContent := fmt.Sprintf("-- Migration: %s (down)\n-- TODO: write your DOWN (rollback) SQL here\n", base)
+	upContent := upTemplate(base, tableName)
+	downContent := downTemplate(base, tableName)
 
 	if err := os.WriteFile(upPath, []byte(upContent), 0o644); err != nil {
 		return File{}, fmt.Errorf("migration: writing %q: %w", upPath, err)
@@ -140,4 +150,43 @@ func NewFile(dir, name string) (File, error) {
 	}
 
 	return File{Timestamp: ts, Name: name, UpPath: upPath, DownPath: downPath}, nil
+}
+
+func sanitizeIdentifier(name string) string {
+	name = strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+	name = regexp.MustCompile(`[^a-z0-9_]`).ReplaceAllString(name, "")
+	return strings.Trim(name, "_")
+}
+
+func inferTableName(migrationName string) string {
+	switch {
+	case strings.HasPrefix(migrationName, "create_") && strings.HasSuffix(migrationName, "_table"):
+		return strings.TrimSuffix(strings.TrimPrefix(migrationName, "create_"), "_table")
+	case strings.HasPrefix(migrationName, "create_"):
+		return strings.TrimPrefix(migrationName, "create_")
+	case strings.Contains(migrationName, "_to_"):
+		parts := strings.Split(migrationName, "_to_")
+		return sanitizeIdentifier(parts[len(parts)-1])
+	case strings.Contains(migrationName, "_from_"):
+		parts := strings.Split(migrationName, "_from_")
+		return sanitizeIdentifier(parts[len(parts)-1])
+	default:
+		return migrationName
+	}
+}
+
+func upTemplate(base, tableName string) string {
+	return fmt.Sprintf(`-- Migration: %s (up)
+CREATE TABLE IF NOT EXISTS %s (
+  id BIGSERIAL PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+`, base, tableName)
+}
+
+func downTemplate(base, tableName string) string {
+	return fmt.Sprintf(`-- Migration: %s (down)
+DROP TABLE IF EXISTS %s;
+`, base, tableName)
 }

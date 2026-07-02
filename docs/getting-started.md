@@ -14,15 +14,8 @@ A 5-minute guide to go from zero to a running DRP-generated Go backend.
 
 ## Step 1 — Install the `drp` CLI
 
-DRP is distributed as a single binary. You have two options:
-
-### Option A — Build from source (recommended while in early development)
-
 ```bash
-git clone https://github.com/DarpanAdhikari/drp-go-cli.git
-cd drp
-go build -o drp .
-sudo mv drp /usr/local/bin/drp   # make it available system-wide
+go install github.com/DarpanAdhikari/drp-go-cli/cmd/drp@latest
 ```
 
 Verify the install:
@@ -30,12 +23,6 @@ Verify the install:
 ```bash
 drp version
 drp --help
-```
-
-### Option B — `go install` (once published)
-
-```bash
-go install github.com/DarpanAdhikari/drp-go-cli@latest
 ```
 
 > **Note:** `drp` does **not** need to be imported into your project. It is a
@@ -182,8 +169,9 @@ routes.RegisterProductRoutes(mux, db)
 ## Step 8 — Run the API
 
 ```bash
-go run ./cmd/api
-# Listening on :8080
+drp run api --watch
+# Watching for changes...
+# Starting go run ./cmd/api
 ```
 
 ---
@@ -199,8 +187,35 @@ drp migrate:create create_users_table
 # edit the generated SQL
 drp migrate:seed                    # migrate + seed
 drp create:crud user                # generate CRUD for "user"
-go run ./cmd/api                    # start the server
+drp run api --watch                 # start the server with hot-reloading
 ```
+
+---
+
+## Step 9 — Deploying to Production
+
+When you are ready to take your DRP-generated backend to production, do not use `drp run api`. Instead, compile your application into a standalone binary:
+
+1. **Build the binary:**
+   ```bash
+   go build -o myapi ./cmd/api
+   ```
+   This gives you a single, executable file (`myapi`) that contains everything your app needs.
+
+2. **Set Environment Variables:**
+   In production, you should pass configuration securely via environment variables (e.g. in your Systemd service, Docker container, or Kubernetes deployment) rather than checking in a `.env` file. However, if an `.env` file is present next to the binary, the application will still load it.
+
+3. **Run migrations (optional but recommended in deployment pipeline):**
+   ```bash
+   # You must have DRP installed on your deployment server/pipeline
+   drp migrate:up
+   ```
+   *(Note: You can also choose to run migrations as part of your CI/CD pipeline rather than directly on the app server).*
+
+4. **Run the binary:**
+   ```bash
+   ./myapi
+   ```
 
 ---
 
@@ -213,6 +228,7 @@ go run ./cmd/api                    # start the server
 | `--force` | `init` | Overwrite a non-empty directory |
 | `--module <path>` | `init`, `create:crud` | Set / override Go module path |
 | `--dry-run` | `migrate:rollback`, `migrate:down`, `migrate:fresh`, `db:drop`, `db:reset` | Preview what *would* happen without making changes |
+| `--watch`, `-w` | `run` | Watch for changes in `.go` and `.env` files and auto-restart |
 
 ---
 

@@ -1,8 +1,10 @@
 package migration
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +24,31 @@ func TestNewFile_CreatesUpAndDownFiles(t *testing.T) {
 	if f.Name != "create_users_table" {
 		t.Errorf("Name = %q, want %q", f.Name, "create_users_table")
 	}
+
+	up, err := os.ReadFile(f.UpPath)
+	if err != nil {
+		t.Fatalf("read up file: %v", err)
+	}
+	if !strings.Contains(string(up), "CREATE TABLE IF NOT EXISTS users") {
+		t.Errorf("up file did not infer users table:\n%s", up)
+	}
+	if !strings.Contains(string(up), "id BIGSERIAL PRIMARY KEY") {
+		t.Errorf("up file missing id column:\n%s", up)
+	}
+	if !strings.Contains(string(up), "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()") {
+		t.Errorf("up file missing created_at column:\n%s", up)
+	}
+	if !strings.Contains(string(up), "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()") {
+		t.Errorf("up file missing updated_at column:\n%s", up)
+	}
+
+	down, err := os.ReadFile(f.DownPath)
+	if err != nil {
+		t.Fatalf("read down file: %v", err)
+	}
+	if !strings.Contains(string(down), "DROP TABLE IF EXISTS users;") {
+		t.Errorf("down file did not infer users table:\n%s", down)
+	}
 }
 
 func TestNewFile_SanitisesName(t *testing.T) {
@@ -32,6 +59,30 @@ func TestNewFile_SanitisesName(t *testing.T) {
 	}
 	if f.Name != "create_users_table" {
 		t.Errorf("sanitised Name = %q, want %q", f.Name, "create_users_table")
+	}
+}
+
+func TestNewFileForTable_UsesExplicitTable(t *testing.T) {
+	dir := t.TempDir()
+	f, err := NewFileForTable(dir, "add_profile_fields", "user_profiles")
+	if err != nil {
+		t.Fatalf("NewFileForTable: %v", err)
+	}
+
+	up, err := os.ReadFile(f.UpPath)
+	if err != nil {
+		t.Fatalf("read up file: %v", err)
+	}
+	if !strings.Contains(string(up), "CREATE TABLE IF NOT EXISTS user_profiles") {
+		t.Errorf("up file did not use explicit table:\n%s", up)
+	}
+
+	down, err := os.ReadFile(f.DownPath)
+	if err != nil {
+		t.Fatalf("read down file: %v", err)
+	}
+	if !strings.Contains(string(down), "DROP TABLE IF EXISTS user_profiles;") {
+		t.Errorf("down file did not use explicit table:\n%s", down)
 	}
 }
 
@@ -122,7 +173,7 @@ func TestFile_Identifier(t *testing.T) {
 	if id == "" {
 		t.Error("Identifier returned empty string")
 	}
-	if id != f.Timestamp.Format(timestampLayout)+"_create_products_table" {
+	if id != fmt.Sprintf("%d_create_products_table", f.Timestamp) {
 		t.Errorf("Identifier = %q, unexpected format", id)
 	}
 }

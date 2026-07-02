@@ -3,6 +3,7 @@ package generator
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -85,5 +86,51 @@ func TestProject_EmptyNameFails(t *testing.T) {
 	err := Project(ProjectOptions{Name: ""})
 	if err == nil {
 		t.Error("expected error for empty name")
+	}
+}
+
+func TestProject_WithAuthCreatesAuthPreset(t *testing.T) {
+	tmp := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(tmp)
+	defer os.Chdir(orig)
+
+	err := Project(ProjectOptions{Name: "myapp", ModuleName: "github.com/test/myapp", Auth: true})
+	if err != nil {
+		t.Fatalf("Project: %v", err)
+	}
+
+	expectedFiles := []string{
+		filepath.Join("myapp", "internal", "auth", "jwt.go"),
+		filepath.Join("myapp", "internal", "auth", "token_store.go"),
+		filepath.Join("myapp", "internal", "middleware", "auth.go"),
+		filepath.Join("myapp", "internal", "handlers", "auth_handler.go"),
+		filepath.Join("myapp", "internal", "routes", "routes.go"),
+		filepath.Join("myapp", "database", "migrations", "000001_create_users.up.sql"),
+	}
+	for _, f := range expectedFiles {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("expected auth file %q not found", f)
+		}
+	}
+
+	env, err := os.ReadFile(filepath.Join("myapp", ".env"))
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+	for _, want := range []string{"JWT_SECRET=", "ACCESS_TOKEN_EXPIRY_MINUTES=", "REFRESH_TOKEN_EXPIRY_DAYS=", "ENCRYPTION_KEY="} {
+		if !strings.Contains(string(env), want) {
+			t.Errorf(".env missing %q", want)
+		}
+	}
+
+	routes, err := os.ReadFile(filepath.Join("myapp", "internal", "routes", "routes.go"))
+	if err != nil {
+		t.Fatalf("read routes: %v", err)
+	}
+	for _, want := range []string{"/auth/register", "/auth/login", "/auth/refresh", "/auth/logout", "/me"} {
+		if !strings.Contains(string(routes), want) {
+			t.Errorf("routes missing %q", want)
+		}
 	}
 }

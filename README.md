@@ -4,10 +4,6 @@ A lightweight, SQL-first CLI for Go backend development. Inspired by Laravel
 Artisan. Not a framework. Not an ORM. Just a tool that generates plain,
 idiomatic Go code and gets out of your way.
 
-> **Status:** repository skeleton only (Step 1 of the build plan). No
-> commands are functional yet — see `docs/architecture.md` and the build
-> plan for the implementation roadmap.
-
 ## Why
 
 DRP removes repetitive backend setup work — project scaffolding,
@@ -16,14 +12,27 @@ runtime dependency. Code DRP generates never imports a `drp` runtime
 package, and there's no third-party ORM or migration library: everything is
 built on `database/sql`.
 
-## Quickstart (target Phase 1 experience)
+## Features
+
+- **Project Scaffolding**: `drp init` sets up a clean, robust standard Go layout.
+- **Built-in Auth**: Option for built-in JWT authentication and user management (`drp init --auth`).
+- **Migrations**: `drp migrate` creates, runs, and rolls back migrations with zero dependencies.
+- **Code Generation**: `drp create:crud` instantly generates models, handlers, repositories, services, and routes.
+- **Zero Lock-in**: Output is standard Go code using `database/sql` and standard libraries.
+
+## Quickstart
 
 ```bash
+# Install DRP
+go install github.com/DarpanAdhikari/drp-go-cli/cmd/drp@latest
+
+# Create a new project
 drp init myapp
 cd myapp
 # edit .env
 drp migrate:seed
 drp create:crud product
+drp run api --watch
 ```
 
 See `docs/getting-started.md`.

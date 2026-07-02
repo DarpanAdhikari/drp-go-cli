@@ -51,7 +51,8 @@ var migrateCreateCmd = &cobra.Command{
 	Short: "Create a new migration file pair (up/down)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
-		f, err := migration.NewFile(migrationsDir, args[0])
+		table, _ := c.Flags().GetString("table")
+		f, err := migration.NewFileForTable(migrationsDir, args[0], table)
 		if err != nil {
 			output.Fail("%v", err)
 			return err
@@ -207,4 +208,5 @@ func init() {
 	migrateDownCmd.Flags().Bool("dry-run", false, "Print what would be stepped down without executing")
 	migrateFreshCmd.Flags().Bool("dry-run", false, "Print what would be dropped/applied without executing")
 	migrateSeedCmd.Flags().Bool("fresh", false, "Clear seed history and re-run all seeders")
+	migrateCreateCmd.Flags().String("table", "", "Table name to use in starter SQL (default: infer from migration name)")
 }
