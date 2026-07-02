@@ -8,7 +8,7 @@ before:
 
 builds:
   - id: drp
-    main: ./drp
+    main: ./cmd/drp
     binary: drp
     ldflags:
       - -s -w

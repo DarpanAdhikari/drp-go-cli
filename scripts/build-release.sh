@@ -7,7 +7,7 @@ set -euo pipefail
 VERSION="${1:-dev}"
 MODULE="github.com/DarpanAdhikari/drp-go-cli"
 LDFLAGS="-s -w -X ${MODULE}/cmd.Version=${VERSION}"
-MAIN="./drp"
+MAIN="./cmd/drp"
 DIST="$(cd "$(dirname "$0")/.." && pwd)/dist"
 
 platforms=(
