@@ -6,8 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
@@ -55,9 +57,34 @@ func runWithWatch(goArgs []string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if currentCmd != nil && currentCmd.Process != nil {
-			output.Info("Restarting...")
-			_ = currentCmd.Process.Kill()
-			_ = currentCmd.Wait()
+			output.Info("Stopping previous process...")
+
+			if runtime.GOOS == "windows" {
+				// Windows: direct kill (no graceful shutdown available)
+				_ = currentCmd.Process.Kill()
+				_ = currentCmd.Wait()
+				output.Success("Previous process stopped.")
+				time.Sleep(500 * time.Millisecond)
+			} else {
+				// Unix/Linux/macOS: graceful shutdown with timeout
+				_ = currentCmd.Process.Signal(syscall.SIGTERM)
+
+				done := make(chan error, 1)
+				go func() {
+					done <- currentCmd.Wait()
+				}()
+
+				select {
+				case <-done:
+					output.Success("Previous process stopped.")
+					time.Sleep(500 * time.Millisecond)
+				case <-time.After(5 * time.Second):
+					output.Warn("Graceful shutdown timed out. Killing process...")
+					_ = currentCmd.Process.Kill()
+					<-done
+					time.Sleep(500 * time.Millisecond)
+				}
+			}
 		} else {
 			output.Info("Watching for changes...")
 			output.Info("Starting go %v", goArgs)
