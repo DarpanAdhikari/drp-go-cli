@@ -7,10 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
@@ -26,36 +24,37 @@ var runCmd = &cobra.Command{
 		if !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(target) {
 			return fmt.Errorf("run: invalid target %q", target)
 		}
-
 		cmdDir := filepath.Join("cmd", target)
 		if stat, err := os.Stat(cmdDir); err != nil || !stat.IsDir() {
 			return fmt.Errorf("run: %s not found", cmdDir)
 		}
-
 		goArgs := append([]string{"run", "./" + filepath.ToSlash(cmdDir)}, args[1:]...)
-
 		watch, _ := c.Flags().GetBool("watch")
 		if watch {
 			return runWithWatch(goArgs)
 		}
-
 		goCmd := exec.Command("go", goArgs...)
 		goCmd.Stdout = os.Stdout
 		goCmd.Stderr = os.Stderr
 		goCmd.Stdin = os.Stdin
 		goCmd.Env = os.Environ()
-
 		output.Info("go %v", goArgs)
 		return goCmd.Run()
 	},
 }
 
+// isPortFree does a real bind-test rather than trusting process state
+// alone. It's a genuine extra safety net (e.g. some *other* unrelated
+// process could be squatting on the port), but it is NOT a substitute
+// for actually terminating the process tree — see stopProcess in
+// run_unix.go / run_windows.go, which is what does that job. This
+// function only tells you whether that job succeeded.
 func isPortFree(port string) bool {
-	listener, err := net.Listen("tcp", ":"+port)
+	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		return false
 	}
-	listener.Close()
+	_ = ln.Close()
 	return true
 }
 
@@ -66,73 +65,57 @@ func getAppPort() string {
 	return "8080"
 }
 
-func waitForPortFree(port string, maxAttempts int, delayMs time.Duration) {
+// waitForPortFree polls until the port is free or attempts are
+// exhausted. It returns whether the port ended up free — the caller
+// MUST check this and refuse to start a new process if false, or you
+// get exactly the crash-loop seen in testing (old server still bound,
+// new server started anyway, bind fails).
+func waitForPortFree(port string, maxAttempts int, delay time.Duration) bool {
 	for i := 0; i < maxAttempts; i++ {
 		if isPortFree(port) {
-			return
+			return true
 		}
 		if i < maxAttempts-1 {
 			output.Warn("Port %s still in use, waiting...", port)
-			time.Sleep(delayMs)
+			time.Sleep(delay)
 		}
 	}
+	return false
 }
 
 func runWithWatch(goArgs []string) error {
-	var currentCmd *exec.Cmd
+	var handle *procHandle
 	var mu sync.Mutex
 	port := getAppPort()
 
 	startProcess := func() {
 		mu.Lock()
 		defer mu.Unlock()
-		if currentCmd != nil && currentCmd.Process != nil {
-			output.Info("Stopping previous process...")
 
-			if runtime.GOOS == "windows" {
-				// Windows: direct kill (no graceful shutdown available)
-				_ = currentCmd.Process.Kill()
-				_ = currentCmd.Wait()
-				output.Success("Previous process stopped.")
-			} else {
-				// Unix/Linux/macOS: graceful shutdown with timeout
-				_ = currentCmd.Process.Signal(syscall.SIGTERM)
+		if handle != nil {
+			stopProcess(handle) // platform-specific: kills the WHOLE tree, not just the go-run wrapper
 
-				done := make(chan error, 1)
-				go func() {
-					done <- currentCmd.Wait()
-				}()
-
-				select {
-				case <-done:
-					output.Success("Previous process stopped.")
-				case <-time.After(5 * time.Second):
-					output.Warn("Graceful shutdown timed out. Killing process...")
-					_ = currentCmd.Process.Kill()
-					<-done
-				}
-			}
-			// Wait for port to be free
 			output.Info("Waiting for port %s to be released...", port)
-			waitForPortFree(port, 10, 500*time.Millisecond)
+			if !waitForPortFree(port, 10, 500*time.Millisecond) {
+				output.Fail("Port %s did not free up after stopping the previous process. Skipping restart — check for a leaked/unrelated process on this port.", port)
+				handle = nil
+				return
+			}
 		} else {
 			output.Info("Watching for changes...")
 			output.Info("Starting go %v", goArgs)
 		}
 
-		currentCmd = exec.Command("go", goArgs...)
-		currentCmd.Stdout = os.Stdout
-		currentCmd.Stderr = os.Stderr
-		currentCmd.Env = os.Environ()
-		// Disable Stdin to prevent background process issues
-
-		if err := currentCmd.Start(); err != nil {
+		h, err := startProcessTree(goArgs) // platform-specific
+		if err != nil {
 			output.Fail("Failed to start: %v", err)
+			handle = nil
+			return
 		}
+		handle = h
 	}
 
 	startProcess()
-
 	lastModTime := getLatestModTime()
 	ticker := time.NewTicker(800 * time.Millisecond)
 	defer ticker.Stop()
