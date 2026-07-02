@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,9 +50,38 @@ var runCmd = &cobra.Command{
 	},
 }
 
+func isPortFree(port string) bool {
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return false
+	}
+	listener.Close()
+	return true
+}
+
+func getAppPort() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return port
+	}
+	return "8080"
+}
+
+func waitForPortFree(port string, maxAttempts int, delayMs time.Duration) {
+	for i := 0; i < maxAttempts; i++ {
+		if isPortFree(port) {
+			return
+		}
+		if i < maxAttempts-1 {
+			output.Warn("Port %s still in use, waiting...", port)
+			time.Sleep(delayMs)
+		}
+	}
+}
+
 func runWithWatch(goArgs []string) error {
 	var currentCmd *exec.Cmd
 	var mu sync.Mutex
+	port := getAppPort()
 
 	startProcess := func() {
 		mu.Lock()
@@ -64,7 +94,6 @@ func runWithWatch(goArgs []string) error {
 				_ = currentCmd.Process.Kill()
 				_ = currentCmd.Wait()
 				output.Success("Previous process stopped.")
-				time.Sleep(500 * time.Millisecond)
 			} else {
 				// Unix/Linux/macOS: graceful shutdown with timeout
 				_ = currentCmd.Process.Signal(syscall.SIGTERM)
@@ -77,14 +106,15 @@ func runWithWatch(goArgs []string) error {
 				select {
 				case <-done:
 					output.Success("Previous process stopped.")
-					time.Sleep(500 * time.Millisecond)
 				case <-time.After(5 * time.Second):
 					output.Warn("Graceful shutdown timed out. Killing process...")
 					_ = currentCmd.Process.Kill()
 					<-done
-					time.Sleep(500 * time.Millisecond)
 				}
 			}
+			// Wait for port to be free
+			output.Info("Waiting for port %s to be released...", port)
+			waitForPortFree(port, 10, 500*time.Millisecond)
 		} else {
 			output.Info("Watching for changes...")
 			output.Info("Starting go %v", goArgs)
