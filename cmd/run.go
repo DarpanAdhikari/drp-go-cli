@@ -86,24 +86,11 @@ func waitForPortFree(port string, maxAttempts int, delay time.Duration) bool {
 func runWithWatch(goArgs []string) error {
 	var handle *procHandle
 	var mu sync.Mutex
-	restarting := false
+	restartCh := make(chan struct{}, 1)
 	port := getAppPort()
 
 	startProcess := func() {
 		mu.Lock()
-		if restarting {
-			mu.Unlock()
-			return
-		}
-		restarting = true
-		mu.Unlock()
-
-		defer func() {
-			mu.Lock()
-			restarting = false
-			mu.Unlock()
-		}()
-
 		if handle != nil {
 			stopProcess(handle)
 
@@ -111,6 +98,7 @@ func runWithWatch(goArgs []string) error {
 			if !waitForPortFree(port, 10, 500*time.Millisecond) {
 				output.Fail("Port %s did not free up after stopping the previous process. Skipping restart — check for a leaked/unrelated process on this port.", port)
 				handle = nil
+				mu.Unlock()
 				return
 			}
 		} else {
@@ -122,11 +110,14 @@ func runWithWatch(goArgs []string) error {
 		if err != nil {
 			output.Fail("Failed to start: %v", err)
 			handle = nil
+			mu.Unlock()
 			return
 		}
 		handle = h
+		mu.Unlock()
 	}
 
+	// Initial start
 	startProcess()
 	lastModTime := getLatestModTime()
 	ticker := time.NewTicker(800 * time.Millisecond)
@@ -136,10 +127,31 @@ func runWithWatch(goArgs []string) error {
 		t := getLatestModTime()
 		if t.After(lastModTime) {
 			lastModTime = t
-			startProcess()
+			select {
+			case restartCh <- struct{}{}:
+			default:
+			}
 		}
 	}
-	return nil
+
+	// Process restart requests - only latest wins
+	go func() {
+		for range restartCh {
+			// Drain any pending requests, keeping only the latest
+			done := false
+			for !done {
+				select {
+				case <-restartCh:
+				default:
+					done = true
+				}
+			}
+			startProcess()
+		}
+	}()
+
+	// Keep main goroutine alive
+	select {}
 }
 
 func getLatestModTime() time.Time {
