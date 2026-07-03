@@ -86,14 +86,26 @@ func waitForPortFree(port string, maxAttempts int, delay time.Duration) bool {
 func runWithWatch(goArgs []string) error {
 	var handle *procHandle
 	var mu sync.Mutex
+	restarting := false
 	port := getAppPort()
 
 	startProcess := func() {
 		mu.Lock()
-		defer mu.Unlock()
+		if restarting {
+			mu.Unlock()
+			return
+		}
+		restarting = true
+		mu.Unlock()
+
+		defer func() {
+			mu.Lock()
+			restarting = false
+			mu.Unlock()
+		}()
 
 		if handle != nil {
-			stopProcess(handle) // platform-specific: kills the WHOLE tree, not just the go-run wrapper
+			stopProcess(handle)
 
 			output.Info("Waiting for port %s to be released...", port)
 			if !waitForPortFree(port, 10, 500*time.Millisecond) {
@@ -106,7 +118,7 @@ func runWithWatch(goArgs []string) error {
 			output.Info("Starting go %v", goArgs)
 		}
 
-		h, err := startProcessTree(goArgs) // platform-specific
+		h, err := startProcessTree(goArgs)
 		if err != nil {
 			output.Fail("Failed to start: %v", err)
 			handle = nil
