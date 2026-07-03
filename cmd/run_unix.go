@@ -35,6 +35,12 @@ func startProcessTree(goArgs []string) (*procHandle, error) {
 
 // stopProcess gracefully stops the whole process group, escalating to
 // SIGKILL if it doesn't exit within the timeout.
+//
+// It sends SIGINT (not SIGTERM) because go run handles SIGINT by
+// terminating the child binary before exiting itself — this ensures
+// the server binary is actually dead when cmd.Wait() returns.
+// On SIGTERM, go run exits immediately without killing the child,
+// which orphans the server and keeps the port bound.
 func stopProcess(h *procHandle) {
 	if h == nil || h.cmd == nil || h.cmd.Process == nil {
 		return
@@ -47,7 +53,7 @@ func stopProcess(h *procHandle) {
 	}
 
 	output.Info("Stopping previous process...")
-	_ = syscall.Kill(-pgid, syscall.SIGTERM) // negative pid = whole group
+	_ = syscall.Kill(-pgid, syscall.SIGINT) // go run handles SIGINT -> kills child
 
 	done := make(chan error, 1)
 	go func() { done <- h.cmd.Wait() }()

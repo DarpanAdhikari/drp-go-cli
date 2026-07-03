@@ -19,6 +19,9 @@ type CRUDOptions struct {
 	Repository bool
 	Service    bool
 	Routes     bool
+
+	// DryRun returns the file list without writing anything.
+	DryRun bool
 }
 
 // allLayers reports whether the options mean "generate everything".
@@ -79,7 +82,7 @@ func CRUD(opts CRUDOptions) ([]string, error) {
 
 	names := NewNames(opts.RawName, opts.ModuleName)
 	renderer := NewRenderer()
-	var written []string
+	var files []string
 
 	for _, l := range blueprintLayers {
 		if !l.enabled(opts) {
@@ -90,24 +93,29 @@ func CRUD(opts CRUDOptions) ([]string, error) {
 
 		// Refuse to overwrite existing files — idempotency rule.
 		if _, err := os.Stat(outPath); err == nil {
-			return written, fmt.Errorf("crud: %q already exists — remove it first or check for name collision", outPath)
+			return files, fmt.Errorf("crud: %q already exists — remove it first or check for name collision", outPath)
+		}
+
+		if opts.DryRun {
+			files = append(files, outPath)
+			continue
 		}
 
 		rendered, err := renderer.Render(l.templateName, names)
 		if err != nil {
-			return written, fmt.Errorf("crud: rendering %s: %w", l.templateName, err)
+			return files, fmt.Errorf("crud: rendering %s: %w", l.templateName, err)
 		}
 
 		if err := os.MkdirAll(l.dir, 0o755); err != nil {
-			return written, fmt.Errorf("crud: creating directory %q: %w", l.dir, err)
+			return files, fmt.Errorf("crud: creating directory %q: %w", l.dir, err)
 		}
 
 		if err := os.WriteFile(outPath, rendered, 0o644); err != nil {
-			return written, fmt.Errorf("crud: writing %q: %w", outPath, err)
+			return files, fmt.Errorf("crud: writing %q: %w", outPath, err)
 		}
 
-		written = append(written, outPath)
+		files = append(files, outPath)
 	}
 
-	return written, nil
+	return files, nil
 }

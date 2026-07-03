@@ -76,6 +76,18 @@ func copyExecutable(src, dest string) error {
 	if err := out.Close(); err != nil {
 		return fmt.Errorf("install: close executable: %w", err)
 	}
+
+	// Windows cannot overwrite a running executable but CAN rename it.
+	// Rename the old binary to .old (if it exists), then place the new one.
+	// This is safe on all platforms.
+	if _, err := os.Stat(dest); err == nil {
+		old := dest + ".old"
+		_ = os.Remove(old)
+		if err := os.Rename(dest, old); err != nil {
+			return fmt.Errorf("install: rename existing %q: %w", dest, err)
+		}
+	}
+
 	if err := os.Rename(tmp, dest); err != nil {
 		return fmt.Errorf("install: replace %q: %w", dest, err)
 	}

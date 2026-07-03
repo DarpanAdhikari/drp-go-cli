@@ -24,14 +24,17 @@ var noColor bool
 // SetNoColor disables ANSI colour output globally.
 func SetNoColor(v bool) { noColor = v }
 
-// isTTY reports whether stdout looks like an interactive terminal.
-func isTTY() bool {
+// IsTTY reports whether stdout looks like an interactive terminal.
+func IsTTY() bool {
 	fi, err := os.Stdout.Stat()
 	if err != nil {
 		return false
 	}
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
+
+// isTTY is the unexported alias used internally.
+func isTTY() bool { return IsTTY() }
 
 func colorise(code, s string) string {
 	if noColor || !isTTY() {

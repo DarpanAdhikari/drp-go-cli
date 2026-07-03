@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -119,6 +120,20 @@ func runWithWatch(goArgs []string) error {
 
 	// Initial start
 	startProcess()
+
+	// Handle Ctrl+C / SIGTERM gracefully — stop the child before exiting
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		<-sigCh
+		mu.Lock()
+		if handle != nil {
+			output.Info("Shutting down...")
+			stopProcess(handle)
+		}
+		os.Exit(0)
+	}()
+
 	lastModTime := getLatestModTime()
 	ticker := time.NewTicker(800 * time.Millisecond)
 	defer ticker.Stop()
