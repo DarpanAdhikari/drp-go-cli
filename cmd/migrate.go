@@ -165,11 +165,16 @@ var migrateSeedCmd = &cobra.Command{
 	Use:   "migrate:seed",
 	Short: "Run pending migrations, then run database seeders",
 	RunE: func(c *cobra.Command, _ []string) error {
+		fresh, _ := c.Flags().GetBool("fresh")
+		if fresh {
+			// --fresh does a full reset: drop all tables, re-run all migrations,
+			// then re-run all seeders. No need to call runMigrateUp separately.
+			return runSeeders(true)
+		}
 		if err := runMigrateUp(c, nil); err != nil {
 			return err
 		}
-		fresh, _ := c.Flags().GetBool("fresh")
-		return runSeeders(fresh)
+		return runSeeders(false)
 	},
 }
 
@@ -207,6 +212,6 @@ func init() {
 	migrateRollbackCmd.Flags().Bool("dry-run", false, "Print what would be rolled back without executing")
 	migrateDownCmd.Flags().Bool("dry-run", false, "Print what would be stepped down without executing")
 	migrateFreshCmd.Flags().Bool("dry-run", false, "Print what would be dropped/applied without executing")
-	migrateSeedCmd.Flags().Bool("fresh", false, "Clear seed history and re-run all seeders")
+	migrateSeedCmd.Flags().Bool("fresh", false, "Drop all tables, re-run migrations, then re-run all seeders from scratch")
 	migrateCreateCmd.Flags().String("table", "", "Table name to use in starter SQL (default: infer from migration name)")
 }

@@ -88,6 +88,7 @@ func runWithWatch(goArgs []string) error {
 	var handle *procHandle
 	var mu sync.Mutex
 	restartCh := make(chan struct{}, 1)
+	restartPending := false
 	port := getAppPort()
 
 	startProcess := func() {
@@ -134,6 +135,25 @@ func runWithWatch(goArgs []string) error {
 		os.Exit(0)
 	}()
 
+	// Restart worker — processes all accumulated changes as a single restart,
+	// with an 800ms debounce gap between each restart cycle.
+	go func() {
+		for range restartCh {
+			for {
+				mu.Lock()
+				if !restartPending {
+					mu.Unlock()
+					break
+				}
+				restartPending = false
+				mu.Unlock()
+
+				time.Sleep(800 * time.Millisecond)
+				startProcess()
+			}
+		}
+	}()
+
 	lastModTime := getLatestModTime()
 	ticker := time.NewTicker(800 * time.Millisecond)
 	defer ticker.Stop()
@@ -142,28 +162,15 @@ func runWithWatch(goArgs []string) error {
 		t := getLatestModTime()
 		if t.After(lastModTime) {
 			lastModTime = t
+			mu.Lock()
+			restartPending = true
+			mu.Unlock()
 			select {
 			case restartCh <- struct{}{}:
 			default:
 			}
 		}
 	}
-
-	// Process restart requests - only latest wins
-	go func() {
-		for range restartCh {
-			// Drain any pending requests, keeping only the latest
-			done := false
-			for !done {
-				select {
-				case <-restartCh:
-				default:
-					done = true
-				}
-			}
-			startProcess()
-		}
-	}()
 
 	// Keep main goroutine alive
 	select {}

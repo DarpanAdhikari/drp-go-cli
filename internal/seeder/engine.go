@@ -6,6 +6,7 @@ import (
 	"os"
 
 	drpdb "github.com/DarpanAdhikari/drp-go-cli/internal/db"
+	"github.com/DarpanAdhikari/drp-go-cli/internal/output"
 )
 
 // Engine runs seeder files against a database, tracking which seeders have
@@ -81,6 +82,8 @@ func (e *Engine) Run(fresh bool) error {
 // runFile executes the SQL in a single seeder file and records it in
 // seed_history on success.
 func (e *Engine) runFile(f File) error {
+	output.Info("Seeding: %s", f.Identifier())
+
 	sqlBytes, err := os.ReadFile(f.Path)
 	if err != nil {
 		return fmt.Errorf("seeder: reading %q: %w", f.Path, err)
@@ -93,6 +96,8 @@ func (e *Engine) runFile(f File) error {
 	if err := RecordSeeder(e.DB, e.DriverName, f.Identifier()); err != nil {
 		return err
 	}
+
+	output.Success("Seeded:  %s", f.Identifier())
 	return nil
 }
 
