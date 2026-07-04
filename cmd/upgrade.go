@@ -22,11 +22,17 @@ const defaultReleaseRepo = "DarpanAdhikari/drp-go-cli"
 
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Download the latest drp release and replace this binary",
+	Short: "Download the latest (or specific) drp release and replace this binary",
 	RunE: func(c *cobra.Command, args []string) error {
 		repo, _ := c.Flags().GetString("repo")
 		binDir, _ := c.Flags().GetString("bin-dir")
 		assetURL, _ := c.Flags().GetString("asset-url")
+		versionFlag, _ := c.Flags().GetString("version")
+
+		if versionFlag != "" && assetURL != "" {
+			output.Fail("--version and --asset-url cannot be used together")
+			return fmt.Errorf("incompatible flags: --version and --asset-url")
+		}
 
 		if binDir == "" {
 			if exe, err := os.Executable(); err == nil && filepath.Base(exe) == executableName("drp") {
@@ -41,13 +47,27 @@ var upgradeCmd = &cobra.Command{
 		}
 
 		if assetURL == "" {
-			asset, version, err := latestReleaseAsset(repo)
-			if err != nil {
-				output.Fail("%v", err)
-				return err
+			var (
+				asset   string
+				version string
+				err     error
+			)
+			if versionFlag != "" {
+				asset, version, err = releaseAssetForTag(repo, versionFlag)
+				if err != nil {
+					output.Fail("%v", err)
+					return err
+				}
+				output.Info("Release: %s", version)
+			} else {
+				asset, version, err = latestReleaseAsset(repo)
+				if err != nil {
+					output.Fail("%v", err)
+					return err
+				}
+				output.Info("Latest release: %s", version)
 			}
 			assetURL = asset
-			output.Info("Latest release: %s", version)
 		}
 
 		dest := filepath.Join(binDir, executableName("drp"))
@@ -80,6 +100,7 @@ func init() {
 	upgradeCmd.Flags().String("repo", defaultReleaseRepo, "GitHub repository in owner/name form")
 	upgradeCmd.Flags().String("bin-dir", "", "Directory containing drp (default: current drp dir or ~/.local/bin)")
 	upgradeCmd.Flags().String("asset-url", "", "Direct release asset URL (mostly for testing)")
+	upgradeCmd.Flags().String("version", "", "Specific version tag to install (e.g. v0.1.0); defaults to latest")
 }
 
 type githubRelease struct {
@@ -125,6 +146,72 @@ func latestReleaseAsset(repo string) (string, string, error) {
 		}
 	}
 	return "", "", fmt.Errorf("upgrade: no release asset found for %s/%s in %s", wantOS, wantArch, repo)
+}
+
+func releaseAssetForTag(repo, tag string) (string, string, error) {
+	if !strings.HasPrefix(tag, "v") {
+		tag = "v" + tag
+	}
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, tag)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "drp-upgrade/"+Version)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("upgrade: fetch release %s: %w", tag, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("upgrade: GitHub returned %s for tag %s", resp.Status, tag)
+	}
+
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", "", fmt.Errorf("upgrade: decode release: %w", err)
+	}
+	wantOS := runtime.GOOS
+	wantArch := runtime.GOARCH
+	for _, asset := range release.Assets {
+		name := strings.ToLower(asset.Name)
+		if strings.Contains(name, wantOS) &&
+			strings.Contains(name, wantArch) &&
+			!strings.Contains(name, "sha256") &&
+			!strings.Contains(name, "checksums") {
+			return asset.BrowserDownloadURL, release.TagName, nil
+		}
+	}
+	return "", "", fmt.Errorf("upgrade: no release asset found for %s/%s in %s", wantOS, wantArch, repo)
+}
+
+func latestReleaseTag(repo string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "drp-version-check/"+Version)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("version: fetch latest release: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("version: GitHub returned %s", resp.Status)
+	}
+
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", fmt.Errorf("version: decode release: %w", err)
+	}
+	return release.TagName, nil
 }
 
 func downloadAsset(url string) (string, error) {
