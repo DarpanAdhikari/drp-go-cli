@@ -29,45 +29,47 @@ func (o CRUDOptions) allLayers() bool {
 	return !o.Model && !o.Handler && !o.Repository && !o.Service && !o.Routes
 }
 
-// layer groups a template name, output directory, and file suffix.
+// layer groups a template name with dynamic output directory and filename.
 type layer struct {
 	templateName string
-	dir          string
-	fileSuffix   string // appended after the snake_case name, e.g. "_handler.go"
+	dirFunc      func(Names) string
+	fileFunc     func(Names) string
 	enabled      func(CRUDOptions) bool
 }
 
 // blueprintLayers defines the generated project's internal directory structure.
-// This is the canonical "what drp create:crud writes where" mapping.
+// Model, repository, service, and handler are placed under internal/<domain>/
+// to match the domain-based layout used by drp init --auth.
+// Routes remain in internal/routes/ with a domain prefix to avoid collisions.
 var blueprintLayers = []layer{
 	{
 		templateName: "model.tpl",
-		dir:          filepath.Join("internal", "models"),
-		fileSuffix:   ".go",
+		dirFunc:      func(n Names) string { return filepath.Join("internal", n.DomainName) },
+		fileFunc:     func(Names) string { return "model.go" },
 		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Model },
 	},
 	{
 		templateName: "repository.tpl",
-		dir:          filepath.Join("internal", "repositories"),
-		fileSuffix:   "_repository.go",
+		dirFunc:      func(n Names) string { return filepath.Join("internal", n.DomainName) },
+		fileFunc:     func(Names) string { return "repository.go" },
 		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Repository },
 	},
 	{
 		templateName: "service.tpl",
-		dir:          filepath.Join("internal", "services"),
-		fileSuffix:   "_service.go",
+		dirFunc:      func(n Names) string { return filepath.Join("internal", n.DomainName) },
+		fileFunc:     func(Names) string { return "service.go" },
 		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Service },
 	},
 	{
 		templateName: "handler.tpl",
-		dir:          filepath.Join("internal", "handlers"),
-		fileSuffix:   "_handler.go",
+		dirFunc:      func(n Names) string { return filepath.Join("internal", n.DomainName) },
+		fileFunc:     func(Names) string { return "handler.go" },
 		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Handler },
 	},
 	{
 		templateName: "routes.tpl",
-		dir:          filepath.Join("internal", "routes"),
-		fileSuffix:   "_routes.go",
+		dirFunc:      func(Names) string { return filepath.Join("internal", "routes") },
+		fileFunc:     func(n Names) string { return n.DomainName + "_routes.go" },
 		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Routes },
 	},
 }
@@ -89,7 +91,9 @@ func CRUD(opts CRUDOptions) ([]string, error) {
 			continue
 		}
 
-		outPath := filepath.Join(l.dir, names.TableName+l.fileSuffix)
+		outDir := l.dirFunc(names)
+		outFile := l.fileFunc(names)
+		outPath := filepath.Join(outDir, outFile)
 
 		// Refuse to overwrite existing files — idempotency rule.
 		if _, err := os.Stat(outPath); err == nil {
@@ -106,8 +110,8 @@ func CRUD(opts CRUDOptions) ([]string, error) {
 			return files, fmt.Errorf("crud: rendering %s: %w", l.templateName, err)
 		}
 
-		if err := os.MkdirAll(l.dir, 0o755); err != nil {
-			return files, fmt.Errorf("crud: creating directory %q: %w", l.dir, err)
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			return files, fmt.Errorf("crud: creating directory %q: %w", outDir, err)
 		}
 
 		if err := os.WriteFile(outPath, rendered, 0o644); err != nil {

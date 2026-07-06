@@ -9,14 +9,15 @@ func TestNewNames(t *testing.T) {
 		wantTable  string
 		wantRoute  string
 		wantPlural string
+		wantDomain string
 	}{
-		{"product", "Product", "products", "products", "Products"},
-		{"product_category", "ProductCategory", "product_categories", "product-categories", "ProductCategories"},
-		{"user", "User", "users", "users", "Users"},
-		{"order_item", "OrderItem", "order_items", "order-items", "OrderItems"},
-		{"category", "Category", "categories", "categories", "Categories"},
-		{"tax", "Tax", "taxes", "taxes", "Taxes"},
-		{"address", "Address", "addresses", "addresses", "Addresses"},
+		{"product", "Product", "products", "products", "Products", "product"},
+		{"product_category", "ProductCategory", "product_categories", "product-categories", "ProductCategories", "product_category"},
+		{"user", "User", "users", "users", "Users", "user"},
+		{"order_item", "OrderItem", "order_items", "order-items", "OrderItems", "order_item"},
+		{"category", "Category", "categories", "categories", "Categories", "category"},
+		{"tax", "Tax", "taxes", "taxes", "Taxes", "tax"},
+		{"address", "Address", "addresses", "addresses", "Addresses", "address"},
 	}
 
 	for _, tt := range tests {
@@ -33,6 +34,9 @@ func TestNewNames(t *testing.T) {
 			}
 			if n.PluralName != tt.wantPlural {
 				t.Errorf("PluralName = %q, want %q", n.PluralName, tt.wantPlural)
+			}
+			if n.DomainName != tt.wantDomain {
+				t.Errorf("DomainName = %q, want %q", n.DomainName, tt.wantDomain)
 			}
 		})
 	}

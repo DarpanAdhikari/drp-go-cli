@@ -27,19 +27,38 @@ drp init [project-name] [flags]
 | `--module <path>` | _(project name)_ | Go module path (e.g. `github.com/acme/myapp`) |
 | `--force` | `false` | Overwrite a non-empty directory |
 
-### What it generates
+### What it generates (base)
 
 ```
 <project-name>/
 ├── cmd/api/main.go
 ├── internal/config/config.go
-├── internal/handlers/
-├── internal/repositories/
-├── internal/services/
-├── internal/routes/
-├── internal/models/
 ├── database/migrations/
 ├── database/seeders/
+├── pkg/
+├── templates/
+├── .env
+├── .env.example
+├── .gitignore
+├── go.mod
+└── README.md
+```
+
+### With `--auth`
+
+```
+<project-name>/
+├── cmd/api/main.go
+├── internal/
+│   ├── auth/                  ← JWT, token store, auth handlers
+│   ├── config/config.go
+│   ├── middleware/             ← CORS, rate limiting, request ID, auth
+│   ├── routes/
+│   ├── shared/                ← base types, context keys, response helpers
+│   └── user/                  ← user model, repository, service, handler
+├── database/migrations/
+├── database/seeders/
+├── docs/                      ← swagger documentation
 ├── pkg/
 ├── templates/
 ├── .env
@@ -57,6 +76,9 @@ drp init [project-name] [flags]
 ```bash
 # Basic usage
 drp init myapp
+
+# With authentication preset
+drp init myapp --auth
 
 # Custom Go module path
 drp init myapp --module github.com/acme/myapp
@@ -311,15 +333,20 @@ Generate all CRUD layers for a resource inside the current project directory.
 drp create:crud [name] [flags]
 ```
 
-With no layer flags, **all five files** are generated:
+With no layer flags, **all five files** are generated (domain-based layout):
 
 ```
-internal/models/<name>.go
-internal/repositories/<name>_repository.go
-internal/services/<name>_service.go
-internal/handlers/<name>_handler.go
-internal/routes/<name>_routes.go
+internal/<domain>/model.go
+internal/<domain>/repository.go
+internal/<domain>/service.go
+internal/<domain>/handler.go
+internal/routes/<domain>_routes.go
 ```
+
+All four domain layers share the same package — no cross-package imports
+between model, repository, service, and handler. For example, `drp create:crud product`
+creates `internal/product/model.go`, `internal/product/repository.go`, etc.,
+all under `package product`.
 
 Use layer flags to generate specific files only:
 
@@ -350,6 +377,74 @@ After generation, register the routes in `cmd/api/main.go`:
 ```go
 routes.RegisterProductRoutes(mux, db)
 ```
+
+---
+
+## `drp test`
+
+Run all project tests. Runs `go mod tidy` then `go test ./...`.
+
+```
+drp test [flags]
+```
+
+### Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `-v, --verbose` | `false` | Verbose output (each test name) |
+| `--cover` | `false` | Include coverage report |
+
+### Examples
+
+```bash
+drp test          # compact output
+drp test -v       # verbose
+drp test -cover   # with coverage
+```
+
+---
+
+## `drp build`
+
+Compile a production binary from `./cmd/<target>`.
+
+```
+drp build [target] [flags]
+```
+
+Target defaults to `"api"` (builds `./cmd/api`).
+
+### Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `-o, --output <path>` | `./dist/<target>` | Custom output path |
+
+### Examples
+
+```bash
+drp build            # builds ./cmd/api → ./dist/api
+drp build worker     # builds ./cmd/worker → ./dist/worker
+drp build -o myapp   # builds ./cmd/api → ./myapp
+```
+
+---
+
+## `drp docs:generate`
+
+Regenerate swagger documentation. Parses all Swaggo annotations
+(`@Summary`, `@Router`, `@Param`, etc.) and produces full
+`docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`.
+
+If the `swag` CLI binary is not installed, it is fetched automatically.
+
+```
+drp docs:generate
+```
+
+> Run this after adding or modifying handler annotations to keep your
+> API documentation in sync with the code.
 
 ---
 

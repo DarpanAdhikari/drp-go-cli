@@ -14,6 +14,7 @@ type Names struct {
 	PluralName string // naive plural: "ProductCategories"
 	TableName  string // snake_case:   "product_categories"
 	RouteName  string // kebab-case:   "product-categories"
+	DomainName string // snake_case singular: "product_category"
 	ModuleName string // from go.mod:  "github.com/yourorg/myapp"
 }
 
@@ -31,6 +32,7 @@ func NewNames(raw, moduleName string) Names {
 		PluralName: plural,
 		TableName:  tableSnake,
 		RouteName:  strings.ReplaceAll(tableSnake, "_", "-"),
+		DomainName: snake,
 		ModuleName: moduleName,
 	}
 }

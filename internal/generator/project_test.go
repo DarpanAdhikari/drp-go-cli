@@ -20,12 +20,12 @@ func TestProject_CreatesLayout(t *testing.T) {
 
 	expectedDirs := []string{
 		filepath.Join("myapp", "cmd", "api"),
+		filepath.Join("myapp", "internal", "auth"),
 		filepath.Join("myapp", "internal", "config"),
-		filepath.Join("myapp", "internal", "handlers"),
-		filepath.Join("myapp", "internal", "repositories"),
-		filepath.Join("myapp", "internal", "services"),
+		filepath.Join("myapp", "internal", "middleware"),
 		filepath.Join("myapp", "internal", "routes"),
-		filepath.Join("myapp", "internal", "models"),
+		filepath.Join("myapp", "internal", "shared"),
+		filepath.Join("myapp", "internal", "user"),
 		filepath.Join("myapp", "database", "migrations"),
 		filepath.Join("myapp", "database", "seeders"),
 	}
@@ -103,8 +103,24 @@ func TestProject_WithAuthCreatesAuthPreset(t *testing.T) {
 	expectedFiles := []string{
 		filepath.Join("myapp", "internal", "auth", "jwt.go"),
 		filepath.Join("myapp", "internal", "auth", "token_store.go"),
+		filepath.Join("myapp", "internal", "auth", "handler.go"),
+		filepath.Join("myapp", "internal", "auth", "docs.go"),
+		filepath.Join("myapp", "docs", "docs.go"),
 		filepath.Join("myapp", "internal", "middleware", "auth.go"),
-		filepath.Join("myapp", "internal", "handlers", "auth_handler.go"),
+		filepath.Join("myapp", "internal", "middleware", "cors.go"),
+		filepath.Join("myapp", "internal", "middleware", "requestid.go"),
+		filepath.Join("myapp", "internal", "middleware", "rate_limiter.go"),
+		filepath.Join("myapp", "internal", "middleware", "rate_limit.go"),
+		filepath.Join("myapp", "internal", "shared", "base.go"),
+		filepath.Join("myapp", "internal", "shared", "context.go"),
+		filepath.Join("myapp", "internal", "shared", "response.go"),
+		filepath.Join("myapp", "internal", "user", "model.go"),
+		filepath.Join("myapp", "internal", "user", "repository.go"),
+		filepath.Join("myapp", "internal", "user", "service.go"),
+		filepath.Join("myapp", "internal", "user", "handler.go"),
+		filepath.Join("myapp", "internal", "user", "repository_test.go"),
+		filepath.Join("myapp", "internal", "user", "service_test.go"),
+		filepath.Join("myapp", "internal", "auth", "handler_test.go"),
 		filepath.Join("myapp", "internal", "routes", "routes.go"),
 		filepath.Join("myapp", "database", "migrations", "000001_create_users.up.sql"),
 	}
@@ -132,5 +148,16 @@ func TestProject_WithAuthCreatesAuthPreset(t *testing.T) {
 		if !strings.Contains(string(routes), want) {
 			t.Errorf("routes missing %q", want)
 		}
+	}
+
+	mainGo, err := os.ReadFile(filepath.Join("myapp", "cmd", "api", "main.go"))
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(mainGo), "/swagger/") {
+		t.Error("main.go missing swagger route")
+	}
+	if !strings.Contains(string(mainGo), "http-swagger") {
+		t.Error("main.go missing http-swagger import")
 	}
 }

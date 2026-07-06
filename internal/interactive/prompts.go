@@ -1,11 +1,11 @@
 package interactive
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/huh"
 )
 
 type CRUDSelections struct {
@@ -16,127 +16,192 @@ type CRUDSelections struct {
 	Routes     bool
 }
 
-type layerOption struct {
-	key  string
-	path string
+type InitOptions struct {
+	Name     string
+	Module   string
+	Auth     bool
+	Driver   string
+	Infra    []string
 }
 
-var layers = []layerOption{
-	{"Model", "internal/models"},
-	{"Repository", "internal/repositories"},
-	{"Service", "internal/services"},
-	{"Handler", "internal/handlers"},
-	{"Routes", "internal/routes"},
+func PromptInit(name string) (InitOptions, error) {
+	var opts InitOptions
+
+	if name != "" {
+		opts.Name = name
+	}
+
+	authChoice := "auth"
+
+	groups := []*huh.Group{}
+
+	if opts.Name == "" {
+		groups = append(groups, huh.NewGroup(
+			huh.NewInput().
+				Title("Project name").
+				Description("Name of the Go project directory and binary.").
+				Value(&opts.Name).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("project name cannot be empty")
+					}
+					return nil
+				}),
+		))
+	}
+
+	groups = append(groups, huh.NewGroup(
+		huh.NewInput().
+			Title("Module path").
+			Description("Go module path (e.g. github.com/yourorg/myapp). Leave empty to use project name.").
+			Value(&opts.Module).
+			Placeholder("(default: project name)"),
+
+		huh.NewSelect[string]().
+			Title("Authentication").
+			Options(
+				huh.NewOption("Full JWT auth (register, login, refresh, device sessions)", "auth"),
+				huh.NewOption("None (minimal project skeleton)", "none"),
+			).
+			Value(&authChoice),
+	))
+
+	groups = append(groups, huh.NewGroup(
+		huh.NewSelect[string]().
+			Title("Database driver").
+			Options(
+				huh.NewOption("PostgreSQL", "postgres"),
+				huh.NewOption("MySQL", "mysql"),
+			).
+			Value(&opts.Driver),
+
+		huh.NewMultiSelect[string]().
+			Title("Infrastructure files").
+			Description("Select the infrastructure files to generate.").
+			Options(
+				huh.NewOption("Docker (Dockerfile, compose, .dockerignore)", "docker"),
+				huh.NewOption("CI (GitHub Actions)", "ci"),
+				huh.NewOption("Makefile", "make"),
+				huh.NewOption("Lint (.editorconfig, .golangci.yml)", "lint"),
+			).
+			Value(&opts.Infra),
+	))
+
+	form := huh.NewForm(groups...).
+		WithTheme(huh.ThemeCatppuccin()).
+		WithShowHelp(true).
+		WithShowErrors(true)
+
+	if err := form.Run(); err != nil {
+		return opts, err
+	}
+
+	opts.Auth = authChoice == "auth"
+
+	if opts.Module == "" {
+		opts.Module = opts.Name
+	}
+
+	return opts, nil
 }
 
 func CRUDLayerSelection(resourceName string) (CRUDSelections, error) {
-	fmt.Println()
-	fmt.Printf("Generate CRUD for %q — select layers by number:\n", resourceName)
-	fmt.Println()
-	for i, l := range layers {
-		fmt.Printf("  [%d] %s\n", i+1, l.key)
-	}
-	fmt.Println()
-	fmt.Print("Enter numbers (comma/space separated, e.g. 1,2,3 or 1-5): ")
+	var selections CRUDSelections
+	var selected []string
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	input := scanner.Text()
-	if err := scanner.Err(); err != nil {
-		return CRUDSelections{}, fmt.Errorf("read input: %w", err)
-	}
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(fmt.Sprintf("Generate CRUD for %q — select layers", resourceName)).
+				Description("Choose which layers to generate.").
+				Options(
+					huh.NewOption("Model", "model").Selected(true),
+					huh.NewOption("Repository", "repository").Selected(true),
+					huh.NewOption("Service", "service").Selected(true),
+					huh.NewOption("Handler", "handler").Selected(true),
+					huh.NewOption("Routes", "routes").Selected(true),
+				).
+				Value(&selected),
+		),
+	).
+		WithTheme(huh.ThemeCatppuccin()).
+		WithShowHelp(true).
+		WithShowErrors(true)
 
-	selected := parseRange(input)
-
-	sel := CRUDSelections{}
-	for _, n := range selected {
-		switch n {
-		case 1:
-			sel.Model = true
-		case 2:
-			sel.Repository = true
-		case 3:
-			sel.Service = true
-		case 4:
-			sel.Handler = true
-		case 5:
-			sel.Routes = true
-		}
+	if err := form.Run(); err != nil {
+		return selections, err
 	}
 
-	if !sel.Model && !sel.Repository && !sel.Service && !sel.Handler && !sel.Routes {
+	sel := make(map[string]bool)
+	for _, s := range selected {
+		sel[s] = true
+	}
+	selections.Model = sel["model"]
+	selections.Repository = sel["repository"]
+	selections.Service = sel["service"]
+	selections.Handler = sel["handler"]
+	selections.Routes = sel["routes"]
+
+	if !selections.Model && !selections.Repository && !selections.Service && !selections.Handler && !selections.Routes {
 		fmt.Fprintln(os.Stderr, "No layers selected. Aborting.")
 		os.Exit(2)
 	}
 
-	return sel, nil
+	return selections, nil
 }
 
 func PromptModule() (string, error) {
-	fmt.Print("Go module name (e.g. github.com/yourorg/myapp): ")
+	var module string
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	module := strings.TrimSpace(scanner.Text())
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("read input: %w", err)
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Go module name").
+				Description("e.g. github.com/yourorg/myapp").
+				Value(&module).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("module name cannot be empty")
+					}
+					return nil
+				}),
+		),
+	).
+		WithTheme(huh.ThemeCatppuccin())
+
+	if err := form.Run(); err != nil {
+		return "", err
 	}
 
-	if module == "" {
-		return "", fmt.Errorf("module name cannot be empty")
-	}
-
-	return module, nil
+	return strings.TrimSpace(module), nil
 }
 
 func ConfirmGeneration(files []string) (bool, error) {
-	fmt.Println()
-	fmt.Println("The following files will be created:")
+	var confirmed bool
+
+	summary := strings.Builder{}
 	for _, f := range files {
-		fmt.Printf("  \u2713 %s\n", f)
-	}
-	fmt.Println()
-
-	fmt.Print("Proceed with generation? (Y/n): ")
-
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	response := strings.TrimSpace(scanner.Text())
-	if err := scanner.Err(); err != nil {
-		return false, fmt.Errorf("read input: %w", err)
+		summary.WriteString(fmt.Sprintf("  • %s\n", f))
 	}
 
-	return response == "" || strings.EqualFold(response, "y") || strings.EqualFold(response, "yes"), nil
-}
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Files to be created").
+				Description(summary.String()),
 
-func parseRange(input string) []int {
-	input = strings.ReplaceAll(input, ",", " ")
-	fields := strings.Fields(input)
+			huh.NewConfirm().
+				Title("Proceed with generation?").
+				Affirmative("Yes, generate").
+				Negative("Cancel").
+				Value(&confirmed),
+		),
+	).
+		WithTheme(huh.ThemeCatppuccin())
 
-	var result []int
-	seen := make(map[int]bool)
-
-	for _, f := range fields {
-		if strings.Contains(f, "-") {
-			parts := strings.SplitN(f, "-", 2)
-			start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-			end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-			if err1 == nil && err2 == nil && start <= end {
-				for i := start; i <= end; i++ {
-					if i >= 1 && i <= len(layers) && !seen[i] {
-						result = append(result, i)
-						seen[i] = true
-					}
-				}
-			}
-		} else {
-			n, err := strconv.Atoi(f)
-			if err == nil && n >= 1 && n <= len(layers) && !seen[n] {
-				result = append(result, n)
-				seen[n] = true
-			}
-		}
+	if err := form.Run(); err != nil {
+		return false, err
 	}
 
-	return result
+	return confirmed, nil
 }

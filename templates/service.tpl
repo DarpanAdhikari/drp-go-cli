@@ -1,29 +1,24 @@
-package services
+package {{.DomainName}}
 
-import (
-	"fmt"
-
-	"{{.ModuleName}}/internal/models"
-	"{{.ModuleName}}/internal/repositories"
-)
+import "fmt"
 
 // {{.Name}}Service contains business logic for {{.Name}} operations.
 type {{.Name}}Service struct {
-	repo *repositories.{{.Name}}Repository
+	repo *{{.Name}}Repository
 }
 
 // New{{.Name}}Service constructs a new {{.Name}}Service.
-func New{{.Name}}Service(repo *repositories.{{.Name}}Repository) *{{.Name}}Service {
+func New{{.Name}}Service(repo *{{.Name}}Repository) *{{.Name}}Service {
 	return &{{.Name}}Service{repo: repo}
 }
 
 // GetAll returns all {{.PluralName}}.
-func (s *{{.Name}}Service) GetAll() ([]models.{{.Name}}, error) {
+func (s *{{.Name}}Service) GetAll() ([]{{.Name}}, error) {
 	return s.repo.FindAll()
 }
 
 // GetByID returns a single {{.Name}} by ID, or an error if not found.
-func (s *{{.Name}}Service) GetByID(id int64) (*models.{{.Name}}, error) {
+func (s *{{.Name}}Service) GetByID(id int64) (*{{.Name}}, error) {
 	m, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, err
@@ -35,13 +30,13 @@ func (s *{{.Name}}Service) GetByID(id int64) (*models.{{.Name}}, error) {
 }
 
 // Create validates and creates a new {{.Name}}.
-func (s *{{.Name}}Service) Create(m *models.{{.Name}}) (*models.{{.Name}}, error) {
+func (s *{{.Name}}Service) Create(m *{{.Name}}) (*{{.Name}}, error) {
 	// TODO: add validation logic here
 	return s.repo.Create(m)
 }
 
 // Update validates and updates an existing {{.Name}}.
-func (s *{{.Name}}Service) Update(m *models.{{.Name}}) (*models.{{.Name}}, error) {
+func (s *{{.Name}}Service) Update(m *{{.Name}}) (*{{.Name}}, error) {
 	// TODO: add validation logic here
 	return s.repo.Update(m)
 }

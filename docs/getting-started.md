@@ -57,21 +57,30 @@ drp init myapp
 cd myapp
 ```
 
-What gets created:
+For a project with built-in authentication (JWT, user management, middleware):
+
+```bash
+drp init myapp --auth
+cd myapp
+```
+
+What gets created (with `--auth`):
 
 ```
 myapp/
 ├── cmd/api/main.go          ← runnable HTTP server entry point
 ├── internal/
+│   ├── auth/                ← JWT, token store, auth handlers
 │   ├── config/config.go     ← standalone config loader (no drp import)
-│   ├── handlers/
-│   ├── repositories/
-│   ├── services/
+│   ├── middleware/           ← CORS, rate limiting, request ID, auth
 │   ├── routes/
-│   └── models/
+│   ├── shared/              ← base types, context helpers, response helpers
+│   └── user/                ← user model, repository, service, handler
 ├── database/
 │   ├── migrations/
 │   └── seeders/
+├── dist/                    ← production binaries (drp build)
+├── docs/                    ← swagger documentation (drp docs:generate)
 ├── pkg/
 ├── templates/
 ├── .env                     ← your local secrets (git-ignored)
@@ -113,6 +122,19 @@ All others have sensible defaults.
 
 ---
 
+## Step 4b — Run tests
+
+Your project (especially with `--auth`) comes with ready-to-run tests:
+
+```bash
+drp test        # runs all tests
+drp test -v     # verbose output
+```
+
+This runs `go mod tidy` and `go test ./...` for you.
+
+---
+
 ## Step 5 — Create and run your first migration
 
 ```bash
@@ -148,13 +170,13 @@ drp migrate:seed
 drp create:crud product
 ```
 
-This generates five files under your project:
+This generates five files under your project (domain-based layout):
 
 ```
-internal/models/product.go
-internal/repositories/product_repository.go
-internal/services/product_service.go
-internal/handlers/product_handler.go
+internal/product/model.go
+internal/product/repository.go
+internal/product/service.go
+internal/product/handler.go
 internal/routes/product_routes.go
 ```
 
@@ -198,7 +220,9 @@ When you are ready to take your DRP-generated backend to production, do not use 
 
 1. **Build the binary:**
    ```bash
-   go build -o myapi ./cmd/api
+   drp build
+   # or with a custom name:
+   drp build -o myapi
    ```
    This gives you a single, executable file (`myapi`) that contains everything your app needs.
 
@@ -219,6 +243,21 @@ When you are ready to take your DRP-generated backend to production, do not use 
 
 ---
 
+## Step 9b — Generate API documentation (auth preset only)
+
+If you used `--auth`, your project includes Swaggo annotations on all
+handlers. Generate the swagger UI docs:
+
+```bash
+drp docs:generate
+```
+
+This installs the `swag` CLI if missing, parses all `@Router`, `@Param`,
+etc. annotations, and produces the OpenAPI spec under `docs/`. View the
+UI at `http://localhost:8080/swagger/` when the API is running.
+
+---
+
 ## Useful flags
 
 | Flag | Applies to | Effect |
@@ -236,4 +275,6 @@ When you are ready to take your DRP-generated backend to production, do not use 
 
 - See [`commands.md`](commands.md) for the full command reference.
 - See [`architecture.md`](architecture.md) for how DRP is structured internally.
+- See [`swagger_settings.md`](swagger_settings.md) for how to view and customise your API documentation.
+- See [`test_generation.md`](test_generation.md) for how to run and extend the generated test suite.
 - See [`contributing.md`](contributing.md) if you want to add commands or templates.

@@ -23,12 +23,12 @@ With specific flags (non-interactive):
   --routes    routes only
   --no-interaction   skip interactive prompts (implies all layers)
 
-Generated files:
-  internal/models/<name>.go
-  internal/repositories/<name>_repository.go
-  internal/services/<name>_service.go
-  internal/handlers/<name>_handler.go
-  internal/routes/<name>_routes.go`,
+Generated files (domain-based layout):
+  internal/<domain>/model.go
+  internal/<domain>/repository.go
+  internal/<domain>/service.go
+  internal/<domain>/handler.go
+  internal/routes/<domain>_routes.go`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
 		module, _ := c.Flags().GetString("module")

@@ -4,17 +4,15 @@ import (
 	"database/sql"
 	"net/http"
 
-	"{{.ModuleName}}/internal/handlers"
-	"{{.ModuleName}}/internal/repositories"
-	"{{.ModuleName}}/internal/services"
+	"{{.ModuleName}}/internal/{{.DomainName}}"
 )
 
 // Register{{.Name}}Routes wires the {{.Name}} resource routes onto mux.
 // Call this from your main router setup.
 func Register{{.Name}}Routes(mux *http.ServeMux, db *sql.DB) {
-	repo := repositories.New{{.Name}}Repository(db)
-	svc := services.New{{.Name}}Service(repo)
-	h := handlers.New{{.Name}}Handler(svc)
+	repo := {{.DomainName}}.New{{.Name}}Repository(db)
+	svc := {{.DomainName}}.New{{.Name}}Service(repo)
+	h := {{.DomainName}}.New{{.Name}}Handler(svc)
 
 	mux.HandleFunc("/{{.RouteName}}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

@@ -1,21 +1,19 @@
-package handlers
+package {{.DomainName}}
 
 import (
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"{{.ModuleName}}/internal/services"
 )
 
 // {{.Name}}Handler handles HTTP requests for the {{.Name}} resource.
 type {{.Name}}Handler struct {
-	service *services.{{.Name}}Service
+	service *{{.Name}}Service
 }
 
 // New{{.Name}}Handler constructs a new {{.Name}}Handler.
-func New{{.Name}}Handler(service *services.{{.Name}}Service) *{{.Name}}Handler {
+func New{{.Name}}Handler(service *{{.Name}}Service) *{{.Name}}Handler {
 	return &{{.Name}}Handler{service: service}
 }
 

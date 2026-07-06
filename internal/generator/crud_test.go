@@ -25,11 +25,11 @@ func TestCRUD_AllLayers(t *testing.T) {
 	}
 
 	expected := []string{
-		filepath.Join("internal", "models", "products.go"),
-		filepath.Join("internal", "repositories", "products_repository.go"),
-		filepath.Join("internal", "services", "products_service.go"),
-		filepath.Join("internal", "handlers", "products_handler.go"),
-		filepath.Join("internal", "routes", "products_routes.go"),
+		filepath.Join("internal", "product", "model.go"),
+		filepath.Join("internal", "product", "repository.go"),
+		filepath.Join("internal", "product", "service.go"),
+		filepath.Join("internal", "product", "handler.go"),
+		filepath.Join("internal", "routes", "product_routes.go"),
 	}
 	for _, path := range expected {
 		if _, err := os.Stat(path); err != nil {
@@ -55,7 +55,7 @@ func TestCRUD_ModelOnly(t *testing.T) {
 	if len(written) != 1 {
 		t.Errorf("expected 1 file, got %d: %v", len(written), written)
 	}
-	if written[0] != filepath.Join("internal", "models", "products.go") {
+	if written[0] != filepath.Join("internal", "product", "model.go") {
 		t.Errorf("unexpected file: %q", written[0])
 	}
 }
@@ -103,6 +103,9 @@ func TestCRUD_RenderedContentContainsResourceName(t *testing.T) {
 	content := string(data)
 	if !contains(content, "Invoice") {
 		t.Errorf("model file doesn't contain 'Invoice':\n%s", content)
+	}
+	if !contains(content, "package invoice") {
+		t.Errorf("model file doesn't contain 'package invoice':\n%s", content)
 	}
 }
 

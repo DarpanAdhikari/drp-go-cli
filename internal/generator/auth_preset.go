@@ -8,130 +8,58 @@ import (
 
 func authProjectFiles(opts ProjectOptions) map[string]string {
 	mod := opts.ModuleName
+	drv := opts.DBDriver
+	dbImport := "github.com/lib/pq v1.10.9"
+	if drv == "mysql" {
+		dbImport = "github.com/go-sql-driver/mysql v1.8.1"
+	}
 
 	return map[string]string{
 		"go.mod": fmt.Sprintf(`module %s
 
 go %s
 
-require (
-	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/joho/godotenv v1.5.1
-	github.com/lib/pq v1.10.9
-	golang.org/x/crypto v0.24.0
-)
-`, mod, getGoVersion()),
-
-		".env": strings.Join([]string{
-			"# Database configuration",
-			"DB_DRIVER=postgres",
-			"DB_HOST=127.0.0.1",
-			"DB_PORT=5432",
-			"DB_USER=postgres",
-			"DB_PASSWORD=secret",
-			fmt.Sprintf("DB_NAME=%s", opts.Name),
-			"DB_SSLMODE=disable",
-			"",
-			"# Application",
-			"APP_PORT=8080",
-			"",
-			"# Auth",
-			"JWT_SECRET=change-me-to-a-long-random-secret",
-			"ACCESS_TOKEN_EXPIRY_MINUTES=15",
-			"REFRESH_TOKEN_EXPIRY_DAYS=30",
-			"ENCRYPTION_KEY=change-me-32-byte-random-key",
-		}, "\n") + "\n",
-
-		".env.example": strings.Join([]string{
-			"DB_DRIVER=postgres",
-			"DB_HOST=127.0.0.1",
-			"DB_PORT=5432",
-			"DB_USER=",
-			"DB_PASSWORD=",
-			fmt.Sprintf("DB_NAME=%s", opts.Name),
-			"DB_SSLMODE=disable",
-			"APP_PORT=8080",
-			"JWT_SECRET=",
-			"ACCESS_TOKEN_EXPIRY_MINUTES=15",
-			"REFRESH_TOKEN_EXPIRY_DAYS=30",
-			"ENCRYPTION_KEY=",
-		}, "\n") + "\n",
-
-		filepath.Join("cmd", "api", "main.go"): authMainGo(mod),
-		filepath.Join("internal", "config", "config.go"): fmt.Sprintf(`package config
-
-import (
-	"fmt"
-	"os"
-	"strconv"
-)
-
-type Config struct {
-	DBDriver string
-	DBHost string
-	DBPort string
-	DBUser string
-	DBPassword string
-	DBName string
-	DBSSLMode string
-	AppPort string
-	JWTSecret string
-	AccessTokenExpiryMinutes int
-	RefreshTokenExpiryDays int
-	EncryptionKey string
-}
-
-func Load() *Config {
-	return &Config{
-		DBDriver: getenv("DB_DRIVER", "postgres"),
-		DBHost: getenv("DB_HOST", "127.0.0.1"),
-		DBPort: getenv("DB_PORT", "5432"),
-		DBUser: getenv("DB_USER", "postgres"),
-		DBPassword: getenv("DB_PASSWORD", ""),
-		DBName: getenv("DB_NAME", "%s"),
-		DBSSLMode: getenv("DB_SSLMODE", "disable"),
-		AppPort: getenv("APP_PORT", "8080"),
-		JWTSecret: getenv("JWT_SECRET", "change-me-to-a-long-random-secret"),
-		AccessTokenExpiryMinutes: getenvInt("ACCESS_TOKEN_EXPIRY_MINUTES", 15),
-		RefreshTokenExpiryDays: getenvInt("REFRESH_TOKEN_EXPIRY_DAYS", 30),
-		EncryptionKey: getenv("ENCRYPTION_KEY", ""),
-	}
-}
-
-func (c *Config) PostgresDSN() string {
-	return fmt.Sprintf(
-		"host=%%s port=%%s user=%%s password=%%s dbname=%%s sslmode=%%s",
-		c.DBHost, c.DBPort, c.DBUser, c.DBPassword, c.DBName, c.DBSSLMode,
+	require (
+		github.com/go-playground/validator/v10 v10.20.0
+		github.com/golang-jwt/jwt/v5 v5.3.1
+		github.com/joho/godotenv v1.5.1
+		%s
+		github.com/mattn/go-sqlite3 v1.14.22
+		github.com/stretchr/testify v1.9.0
+		github.com/swaggo/http-swagger/v2 v2.0.2
+		github.com/swaggo/swag v1.16.3
+		golang.org/x/crypto v0.24.0
+		golang.org/x/time v0.5.0
 	)
-}
+`, mod, getGoVersion(), dbImport),
 
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
+		".env":         authEnvContents(opts),
+		".env.example": authEnvExampleContents(opts),
 
-func getenvInt(key string, fallback int) int {
-	v, err := strconv.Atoi(getenv(key, ""))
-	if err != nil {
-		return fallback
-	}
-	return v
-}
-`, opts.Name),
-
-		filepath.Join("internal", "auth", "jwt.go"):                             authJWTGo(mod),
-		filepath.Join("internal", "auth", "token_store.go"):                     authTokenStoreGo(),
-		filepath.Join("internal", "middleware", "auth.go"):                      authMiddlewareGo(mod),
-		filepath.Join("internal", "models", "user.go"):                          authUserModelGo(),
-		filepath.Join("internal", "repositories", "user_repository.go"):         authUserRepositoryGo(mod),
-		filepath.Join("internal", "services", "user_service.go"):                authUserServiceGo(mod),
-		filepath.Join("internal", "handlers", "auth_handler.go"):                authHandlerGo(mod),
-		filepath.Join("internal", "handlers", "user_handler.go"):                authUserHandlerGo(mod),
-		filepath.Join("internal", "handlers", "helpers.go"):                     authHandlerHelpersGo(),
-		filepath.Join("internal", "routes", "routes.go"):                        authRoutesGo(mod),
-		filepath.Join("database", "migrations", "000001_create_users.up.sql"):   authUsersMigrationUp(),
+		filepath.Join("cmd", "api", "main.go"):                       authMainGo(mod, drv),
+		filepath.Join("internal", "config", "config.go"):             authConfigGo(mod, opts.Name, drv),
+		filepath.Join("internal", "shared", "base.go"):               sharedBaseGo(),
+		filepath.Join("internal", "shared", "context.go"):            sharedContextGo(),
+		filepath.Join("internal", "shared", "response.go"):           sharedResponseGo(),
+		filepath.Join("internal", "user", "model.go"):                userModelGo(mod),
+		filepath.Join("internal", "user", "repository.go"):           userRepositoryGo(),
+		filepath.Join("internal", "user", "service.go"):              userServiceGo(),
+		filepath.Join("internal", "user", "handler.go"):              userHandlerGo(mod),
+		filepath.Join("internal", "user", "repository_test.go"):     userRepositoryTestGo(),
+		filepath.Join("internal", "user", "service_test.go"):        userServiceTestGo(),
+		filepath.Join("internal", "auth", "handler_test.go"):        authHandlerTestGo(mod),
+		filepath.Join("internal", "auth", "jwt.go"):                  authJWTGo(mod),
+		filepath.Join("internal", "auth", "token_store.go"):          authTokenStoreGo(),
+		filepath.Join("internal", "auth", "handler.go"):              authHandlerGo(mod),
+		filepath.Join("internal", "auth", "docs.go"):                 authDocsGo(),
+		filepath.Join("docs", "docs.go"):                             docsGo(),
+		filepath.Join("internal", "middleware", "auth.go"):           authMiddlewareGo(mod),
+		filepath.Join("internal", "middleware", "cors.go"):           corsMiddlewareGo(mod),
+		filepath.Join("internal", "middleware", "requestid.go"):      requestIDMiddlewareGo(mod),
+		filepath.Join("internal", "middleware", "rate_limiter.go"):   rateLimiterGo(),
+		filepath.Join("internal", "middleware", "rate_limit.go"):     rateLimitMiddlewareGo(),
+		filepath.Join("internal", "routes", "routes.go"):             authRoutesGo(mod),
+		filepath.Join("database", "migrations", "000001_create_users.up.sql"):   authUsersMigrationUp(drv),
 		filepath.Join("database", "migrations", "000001_create_users.down.sql"): "DROP TABLE IF EXISTS user_tokens;\nDROP TABLE IF EXISTS users;\n",
 
 		"README.md": fmt.Sprintf(`# %s
@@ -159,46 +87,643 @@ Auth routes:
 	}
 }
 
-func authMainGo(mod string) string {
+func authEnvContents(opts ProjectOptions) string {
+	driver := opts.DBDriver
+	if driver == "" {
+		driver = "postgres"
+	}
+	port := "5432"
+	user := "postgres"
+	if driver == "mysql" {
+		port = "3306"
+		user = "root"
+	}
+	return strings.Join([]string{
+		"# Database configuration",
+		fmt.Sprintf("DB_DRIVER=%s", driver),
+		"DB_HOST=127.0.0.1",
+		fmt.Sprintf("DB_PORT=%s", port),
+		fmt.Sprintf("DB_USER=%s", user),
+		"DB_PASSWORD=secret",
+		fmt.Sprintf("DB_NAME=%s", opts.Name),
+		"DB_SSLMODE=disable",
+		"",
+		"# Application",
+		"APP_PORT=8080",
+		"",
+		"# Auth",
+		"JWT_SECRET=change-me-to-a-long-random-secret",
+		"ACCESS_TOKEN_EXPIRY_MINUTES=15",
+		"REFRESH_TOKEN_EXPIRY_DAYS=30",
+		"ENCRYPTION_KEY=change-me-32-byte-random-key",
+		"",
+		"# CORS",
+		"CORS_ORIGINS=*",
+		"",
+		"# Rate limiting",
+		"RATE_LIMIT_ENABLED=true",
+		"RATE_LIMIT_RPS=10",
+		"RATE_LIMIT_BURST=20",
+		"",
+		"# Logging",
+		"LOG_LEVEL=info",
+	}, "\n") + "\n"
+}
+
+func authEnvExampleContents(opts ProjectOptions) string {
+	driver := opts.DBDriver
+	if driver == "" {
+		driver = "postgres"
+	}
+	port := "5432"
+	if driver == "mysql" {
+		port = "3306"
+	}
+	return strings.Join([]string{
+		fmt.Sprintf("DB_DRIVER=%s", driver),
+		"DB_HOST=127.0.0.1",
+		fmt.Sprintf("DB_PORT=%s", port),
+		"DB_USER=",
+		"DB_PASSWORD=",
+		fmt.Sprintf("DB_NAME=%s", opts.Name),
+		"DB_SSLMODE=disable",
+		"APP_PORT=8080",
+		"JWT_SECRET=",
+		"ACCESS_TOKEN_EXPIRY_MINUTES=15",
+		"REFRESH_TOKEN_EXPIRY_DAYS=30",
+		"ENCRYPTION_KEY=",
+		"CORS_ORIGINS=*",
+		"RATE_LIMIT_ENABLED=true",
+		"RATE_LIMIT_RPS=10",
+		"RATE_LIMIT_BURST=20",
+		"LOG_LEVEL=info",
+	}, "\n") + "\n"
+}
+
+func authMainGo(mod, drv string) string {
+	dbImport := "github.com/lib/pq"
+	if drv == "mysql" {
+		dbImport = "github.com/go-sql-driver/mysql"
+	}
 	return fmt.Sprintf(`package main
 
 import (
+	"context"
 	"database/sql"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	_ "github.com/lib/pq"
+	_ "%s"
 	"github.com/joho/godotenv"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"%s/internal/config"
+	_ "%s/docs"
+	"%s/internal/middleware"
 	"%s/internal/routes"
 )
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Printf("warning: .env not found: %%v", err)
+		slog.Warn(".env not found", "error", err)
 	}
 
 	cfg := config.Load()
-	db, err := sql.Open("postgres", cfg.PostgresDSN())
+
+	var logLevel slog.Level
+	switch cfg.LogLevel {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+
+	db, err := sql.Open(cfg.DBDriver, cfg.DSN())
 	if err != nil {
-		log.Fatal("db connect:", err)
+		slog.Error("db connect", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Fatal("db ping:", err)
+		slog.Error("db ping", "error", err)
+		os.Exit(1)
 	}
+	slog.Info("connected to database")
 
 	mux := http.NewServeMux()
-	routes.Register(mux, db, cfg)
+	routes.RegisterAuthRoutes(mux, db, cfg)
+	routes.RegisterHealthRoute(mux, db)
 
-	log.Printf("listening on :%%s", cfg.AppPort)
-	if err := http.ListenAndServe(":"+cfg.AppPort, mux); err != nil {
-		log.Fatal(err)
+	// Swagger UI
+	mux.Handle("GET /swagger/", httpSwagger.Handler(
+		httpSwagger.URL("swagger/doc.json"),
+	))
+
+	handler := middleware.RequestID(middleware.CORS(cfg, mux))
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.AppPort,
+		Handler: handler,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		slog.Info("listening", "port", cfg.AppPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("shutdown error", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("server stopped")
+}
+`, dbImport, mod, mod, mod, mod)
+}
+
+func authConfigGo(mod, name, drv string) string {
+	defaultPort := "5432"
+	defaultUser := "postgres"
+	if drv == "mysql" {
+		defaultPort = "3306"
+		defaultUser = "root"
+	}
+	return fmt.Sprintf(`package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type Config struct {
+	DBDriver   string
+	DBHost     string
+	DBPort     string
+	DBUser     string
+	DBPassword string
+	DBName     string
+	DBSSLMode  string
+	AppPort    string
+	JWTSecret  string
+	AccessTokenExpiryMinutes int
+	RefreshTokenExpiryDays   int
+	EncryptionKey string
+	CORSOrigins   []string
+	LogLevel      string
+	RateLimitEnabled bool
+	RateLimitRPS     int
+	RateLimitBurst   int
+}
+
+func Load() *Config {
+	return &Config{
+		DBDriver:   getenv("DB_DRIVER", "postgres"),
+		DBHost:     getenv("DB_HOST", "127.0.0.1"),
+		DBPort:     getenv("DB_PORT", "%s"),
+		DBUser:     getenv("DB_USER", "%s"),
+		DBPassword: getenv("DB_PASSWORD", ""),
+		DBName:     getenv("DB_NAME", "%s"),
+		DBSSLMode:  getenv("DB_SSLMODE", "disable"),
+		AppPort:    getenv("APP_PORT", "8080"),
+		JWTSecret:  getenv("JWT_SECRET", "change-me-to-a-long-random-secret"),
+		AccessTokenExpiryMinutes: getenvInt("ACCESS_TOKEN_EXPIRY_MINUTES", 15),
+		RefreshTokenExpiryDays:   getenvInt("REFRESH_TOKEN_EXPIRY_DAYS", 30),
+		EncryptionKey:            getenv("ENCRYPTION_KEY", ""),
+		CORSOrigins:              splitAndTrim(getenv("CORS_ORIGINS", "*"), ","),
+		LogLevel:                 getenv("LOG_LEVEL", "info"),
+		RateLimitEnabled:         getenvBool("RATE_LIMIT_ENABLED", true),
+		RateLimitRPS:             getenvInt("RATE_LIMIT_RPS", 10),
+		RateLimitBurst:           getenvInt("RATE_LIMIT_BURST", 20),
 	}
 }
-`, mod, mod)
+
+func (c *Config) DSN() string {
+	if c.DBDriver == "mysql" {
+		return fmt.Sprintf(
+			"%%s:%%s@tcp(%%s:%%s)/%%s?parseTime=true",
+			c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName,
+		)
+	}
+	return fmt.Sprintf(
+		"host=%%s port=%%s user=%%s password=%%s dbname=%%s sslmode=%%s",
+		c.DBHost, c.DBPort, c.DBUser, c.DBPassword, c.DBName, c.DBSSLMode,
+	)
+}
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func getenvInt(key string, fallback int) int {
+	v, err := strconv.Atoi(getenv(key, ""))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func getenvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	return strings.ToLower(v) == "true" || v == "1"
+}
+
+func splitAndTrim(s, sep string) []string {
+	parts := strings.Split(s, sep)
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+`, defaultPort, name, defaultUser)
+}
+
+func sharedBaseGo() string {
+	return `package shared
+
+import "time"
+
+// Base provides common fields for all domain models.
+type Base struct {
+	ID        int64      ` + "`json:\"id\"`" + `
+	CreatedAt time.Time  ` + "`json:\"created_at\"`" + `
+	UpdatedAt time.Time  ` + "`json:\"updated_at\"`" + `
+	DeletedAt *time.Time ` + "`json:\"deleted_at,omitempty\"`" + `
+}
+`
+}
+
+func sharedContextGo() string {
+	return `package shared
+
+import "net/http"
+
+type contextKey string
+
+const (
+	// UserIDKey is used to store the authenticated user's ID in request context.
+	UserIDKey contextKey = "user_id"
+	// TokenJTIKey is used to store the JWT ID in request context.
+	TokenJTIKey contextKey = "token_jti"
+	// RequestIDKey is used to store the request ID in request context.
+	RequestIDKey contextKey = "request_id"
+)
+
+// UserID returns the authenticated user's ID from the request context.
+func UserID(r *http.Request) (int64, bool) {
+	id, ok := r.Context().Value(UserIDKey).(int64)
+	return id, ok
+}
+
+// TokenJTI returns the JWT ID from the request context.
+func TokenJTI(r *http.Request) (string, bool) {
+	jti, ok := r.Context().Value(TokenJTIKey).(string)
+	return jti, ok
+}
+
+// GetRequestID returns the request ID from the request context.
+func GetRequestID(r *http.Request) string {
+	id, _ := r.Context().Value(RequestIDKey).(string)
+	return id
+}
+`
+}
+
+func sharedResponseGo() string {
+	return `package shared
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+// DecodeJSON decodes a JSON request body into dest.
+// It writes a 400 error and returns false on failure.
+func DecodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
+	defer r.Body.Close()
+	if err := json.NewDecoder(r.Body).Decode(dest); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid request body")
+		return false
+	}
+	return true
+}
+
+// WriteJSON encodes v as JSON and writes it with the given status code.
+func WriteJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+// WriteError writes a JSON error response.
+func WriteError(w http.ResponseWriter, status int, message string) {
+	WriteJSON(w, status, map[string]string{"error": message})
+}
+`
+}
+
+func userModelGo(mod string) string {
+	return fmt.Sprintf(`package user
+
+import (
+	"%s/internal/shared"
+)
+
+// User represents a user record in the database.
+type User struct {
+	shared.Base
+	Name         string    `+"`json:\"name\" validate:\"required,min=2,max=120\"`"+`
+	Email        string    `+"`json:\"email\" validate:\"required,email\"`"+`
+	PasswordHash string    `+"`json:\"-\"`"+`
+	IsActive     bool      `+"`json:\"is_active\"`"+`
+}
+
+// UserResponse is the public-safe representation of a user.
+type UserResponse struct {
+	ID       int64  `+"`json:\"id\"`"+`
+	Name     string `+"`json:\"name\"`"+`
+	Email    string `+"`json:\"email\"`"+`
+	IsActive bool   `+"`json:\"is_active\"`"+`
+}
+
+func (u *User) ToResponse() UserResponse {
+	return UserResponse{ID: u.ID, Name: u.Name, Email: u.Email, IsActive: u.IsActive}
+}
+
+// ── Request DTOs ────────────────────────────────────────────────────────────
+
+type RegisterRequest struct {
+	Name     string `+"`json:\"name\" validate:\"required,min=2,max=120\"`"+`
+	Email    string `+"`json:\"email\" validate:\"required,email\"`"+`
+	Password string `+"`json:\"password\" validate:\"required,min=8\"`"+`
+}
+
+type LoginRequest struct {
+	Email      string `+"`json:\"email\" validate:\"required,email\"`"+`
+	Password   string `+"`json:\"password\" validate:\"required\"`"+`
+	MacAddress string `+"`json:\"mac_address,omitempty\"`"+`
+	FCMToken   string `+"`json:\"fcm_token,omitempty\"`"+`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `+"`json:\"refresh_token\" validate:\"required\"`"+`
+	MacAddress   string `+"`json:\"mac_address,omitempty\"`"+`
+	FCMToken     string `+"`json:\"fcm_token,omitempty\"`"+`
+}
+
+type LogoutRequest struct {
+	RefreshToken string `+"`json:\"refresh_token\" validate:\"required\"`"+`
+}
+`, mod)
+}
+
+func userRepositoryGo() string {
+	return `package user
+
+import (
+	"database/sql"
+	"errors"
+)
+
+// Repository handles user database operations.
+type Repository struct {
+	db *sql.DB
+}
+
+// NewRepository constructs a new Repository.
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
+}
+
+// RepositoryInterface defines the contract for user storage.
+type RepositoryInterface interface {
+	Create(u *User) error
+	FindByEmail(email string) (*User, error)
+	FindByID(id int64) (*User, error)
+}
+
+// Compile-time check that *Repository satisfies RepositoryInterface.
+var _ RepositoryInterface = (*Repository)(nil)
+
+// Create inserts a new user into the database.
+func (r *Repository) Create(u *User) error {
+	return r.db.QueryRow(
+		` + "`" + `INSERT INTO users (name, email, password_hash, is_active, created_at, updated_at)
+		 VALUES ($1, $2, $3, true, NOW(), NOW())
+		 RETURNING id, is_active, created_at, updated_at` + "`" + `,
+		u.Name, u.Email, u.PasswordHash,
+	).Scan(&u.ID, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+}
+
+// FindByEmail looks up a user by email.
+func (r *Repository) FindByEmail(email string) (*User, error) {
+	return r.find(` + "`" + `SELECT id, name, email, password_hash, is_active, created_at, updated_at FROM users WHERE email = $1 LIMIT 1` + "`" + `, email)
+}
+
+// FindByID looks up a user by primary key.
+func (r *Repository) FindByID(id int64) (*User, error) {
+	return r.find(` + "`" + `SELECT id, name, email, password_hash, is_active, created_at, updated_at FROM users WHERE id = $1 LIMIT 1` + "`" + `, id)
+}
+
+func (r *Repository) find(query string, arg any) (*User, error) {
+	var u User
+	err := r.db.QueryRow(query, arg).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+`
+}
+
+func userServiceGo() string {
+	return `package user
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"unicode"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+// Service contains user business logic.
+type Service struct {
+	repo RepositoryInterface
+}
+
+// NewService constructs a new Service.
+func NewService(repo RepositoryInterface) *Service {
+	return &Service{repo: repo}
+}
+
+// ServiceInterface defines the contract for user business logic.
+type ServiceInterface interface {
+	Register(req RegisterRequest) (*User, error)
+	Authenticate(email, password string) (*User, error)
+	FindByID(id int64) (*User, error)
+}
+
+// Compile-time check that *Service satisfies ServiceInterface.
+var _ ServiceInterface = (*Service)(nil)
+
+// Register creates a new user after validating input.
+func (s *Service) Register(req RegisterRequest) (*User, error) {
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.Name = strings.TrimSpace(req.Name)
+
+	if req.Email == "" || req.Name == "" {
+		return nil, fmt.Errorf("name and email are required")
+	}
+	if err := validatePassword(req.Password); err != nil {
+		return nil, err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	u := &User{Name: req.Name, Email: req.Email, PasswordHash: string(hash)}
+	if err := s.repo.Create(u); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// Authenticate verifies credentials and returns the user.
+func (s *Service) Authenticate(email, password string) (*User, error) {
+	u, err := s.repo.FindByEmail(strings.TrimSpace(strings.ToLower(email)))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("invalid credentials")
+		}
+		return nil, err
+	}
+	if !u.IsActive {
+		return nil, fmt.Errorf("user is inactive")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	return u, nil
+}
+
+// FindByID returns a user by primary key.
+func (s *Service) FindByID(id int64) (*User, error) {
+	return s.repo.FindByID(id)
+}
+
+func validatePassword(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+	var hasUpper, hasLower, hasDigit bool
+	for _, ch := range password {
+		switch {
+		case unicode.IsUpper(ch):
+			hasUpper = true
+		case unicode.IsLower(ch):
+			hasLower = true
+		case unicode.IsDigit(ch):
+			hasDigit = true
+		}
+	}
+	if !hasUpper {
+		return fmt.Errorf("password must contain an uppercase letter")
+	}
+	if !hasLower {
+		return fmt.Errorf("password must contain a lowercase letter")
+	}
+	if !hasDigit {
+		return fmt.Errorf("password must contain a digit")
+	}
+	return nil
+}
+`
+}
+
+func userHandlerGo(mod string) string {
+	return fmt.Sprintf(`package user
+
+import (
+	"net/http"
+
+	"%s/internal/shared"
+)
+
+// Handler handles user-related HTTP requests.
+type Handler struct {
+	svc *Service
+}
+
+// NewHandler constructs a new Handler.
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
+}
+
+// Me handles GET /me — returns the authenticated user's profile.
+//
+// @Summary Get current user profile
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} user.UserResponse
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /me [get]
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	id, ok := shared.UserID(r)
+	if !ok {
+		shared.WriteError(w, http.StatusUnauthorized, "authorization required")
+		return
+	}
+	user, err := h.svc.FindByID(id)
+	if err != nil {
+		shared.WriteError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	shared.WriteJSON(w, http.StatusOK, user.ToResponse())
+}
+`, mod)
 }
 
 func authJWTGo(mod string) string {
@@ -215,67 +740,67 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"%s/internal/config"
-	"%s/internal/models"
 )
 
 const (
-	TokenTypeAccess = "access"
+	TokenTypeAccess  = "access"
 	TokenTypeRefresh = "refresh"
 )
 
+// Claims holds the JWT payload (minimal — no PII).
 type Claims struct {
-	UserID int64 `+"`json:\"user_id\"`"+`
-	Email string `+"`json:\"email\"`"+`
+	UserID    int64  `+"`json:\"user_id\"`"+`
 	TokenType string `+"`json:\"token_type\"`"+`
 	jwt.RegisteredClaims
 }
 
+// TokenPair contains both access and refresh tokens.
 type TokenPair struct {
-	AccessToken string `+"`json:\"access_token\"`"+`
-	RefreshToken string `+"`json:\"refresh_token\"`"+`
-	TokenType string `+"`json:\"token_type\"`"+`
-	AccessTokenExpiresAt time.Time `+"`json:\"access_token_expires_at\"`"+`
+	AccessToken           string    `+"`json:\"access_token\"`"+`
+	RefreshToken          string    `+"`json:\"refresh_token\"`"+`
+	TokenType             string    `+"`json:\"token_type\"`"+`
+	AccessTokenExpiresAt  time.Time `+"`json:\"access_token_expires_at\"`"+`
 	RefreshTokenExpiresAt time.Time `+"`json:\"refresh_token_expires_at\"`"+`
 }
 
-func GenerateTokenPair(u *models.User, cfg *config.Config) (*TokenPair, *Claims, *Claims, error) {
+// GenerateTokenPair creates both access and refresh tokens for the given user.
+func GenerateTokenPair(userID int64, cfg *config.Config) (*TokenPair, *Claims, *Claims, error) {
 	now := time.Now()
 	accessExp := now.Add(time.Duration(cfg.AccessTokenExpiryMinutes) * time.Minute)
 	refreshExp := now.AddDate(0, 0, cfg.RefreshTokenExpiryDays)
 
-	accessToken, accessClaims, err := generateToken(u, cfg, TokenTypeAccess, accessExp, now)
+	accessToken, accessClaims, err := generateToken(userID, cfg, TokenTypeAccess, accessExp, now)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	refreshToken, refreshClaims, err := generateToken(u, cfg, TokenTypeRefresh, refreshExp, now)
+	refreshToken, refreshClaims, err := generateToken(userID, cfg, TokenTypeRefresh, refreshExp, now)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	return &TokenPair{
-		AccessToken: accessToken,
-		RefreshToken: refreshToken,
-		TokenType: "Bearer",
-		AccessTokenExpiresAt: accessExp,
+		AccessToken:           accessToken,
+		RefreshToken:          refreshToken,
+		TokenType:             "Bearer",
+		AccessTokenExpiresAt:  accessExp,
 		RefreshTokenExpiresAt: refreshExp,
 	}, accessClaims, refreshClaims, nil
 }
 
-func generateToken(u *models.User, cfg *config.Config, tokenType string, exp, now time.Time) (string, *Claims, error) {
+func generateToken(userID int64, cfg *config.Config, tokenType string, exp, now time.Time) (string, *Claims, error) {
 	jti, err := newJTI()
 	if err != nil {
 		return "", nil, err
 	}
 
 	claims := &Claims{
-		UserID: u.ID,
-		Email: u.Email,
+		UserID:    userID,
 		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(exp),
-			IssuedAt: jwt.NewNumericDate(now),
-			ID: jti,
-			Subject: fmt.Sprintf("%%d", u.ID),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        jti,
+			Subject:   fmt.Sprintf("%%d", userID),
 		},
 	}
 
@@ -287,6 +812,7 @@ func generateToken(u *models.User, cfg *config.Config, tokenType string, exp, no
 	return signed, claims, nil
 }
 
+// ParseToken verifies and returns the claims from a JWT string.
 func ParseToken(tokenStr string, cfg *config.Config) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if t.Method != jwt.SigningMethodHS256 {
@@ -303,6 +829,7 @@ func ParseToken(tokenStr string, cfg *config.Config) (*Claims, error) {
 	return nil, jwt.ErrTokenInvalidClaims
 }
 
+// HashToken returns a SHA-256 hex digest of the token string.
 func HashToken(tokenStr string) string {
 	sum := sha256.Sum256([]byte(tokenStr))
 	return hex.EncodeToString(sum[:])
@@ -315,7 +842,7 @@ func newJTI() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
-`, mod, mod)
+`, mod)
 }
 
 func authTokenStoreGo() string {
@@ -329,31 +856,83 @@ import (
 
 var ErrTokenRevoked = errors.New("token is revoked")
 
+// TokenStore handles token persistence and validation.
 type TokenStore struct {
 	db *sql.DB
 }
 
+// TokenRecord represents a stored token record (without PII).
 type TokenRecord struct {
-	JTI string
-	UserID int64
-	Email string
+	JTI       string
+	UserID    int64
 	TokenType string
 	ExpiresAt time.Time
 }
 
+// NewTokenStore constructs a new TokenStore.
 func NewTokenStore(db *sql.DB) *TokenStore {
 	return &TokenStore{db: db}
 }
 
-func (s *TokenStore) Store(claims *Claims, tokenHash string, ipAddress, userAgent string) error {
+// Store inserts a new token record.
+func (s *TokenStore) Store(claims *Claims, tokenHash, ipAddress, userAgent, macAddress, fcmToken string) error {
 	_, err := s.db.Exec(
-		` + "`" + `INSERT INTO user_tokens (user_id, jti, token_hash, token_type, ip_address, user_agent, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)` + "`" + `,
-		claims.UserID, claims.ID, tokenHash, claims.TokenType, ipAddress, userAgent, claims.ExpiresAt.Time, time.Now(),
+		` + "`" + `INSERT INTO user_tokens (user_id, jti, token_hash, token_type, ip_address, user_agent, mac_address, fcm_token, expires_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())` + "`" + `,
+		claims.UserID, claims.ID, tokenHash, claims.TokenType, ipAddress, userAgent, macAddress, fcmToken, claims.ExpiresAt.Time,
 	)
 	return err
 }
 
+// UpsertDeviceSession finds an existing active device session for the user
+// (by mac_address, falling back to user_agent) and updates it in-place.
+// If none is found, a new session is inserted.
+// This preserves trust_level, authorized_at, and original created_at.
+func (s *TokenStore) UpsertDeviceSession(userID int64, tokenHash, jti, tokenType, ipAddress, userAgent, macAddress, fcmToken string, expiresAt time.Time) error {
+	var existingID int64
+
+	// Prefer matching by mac_address
+	if macAddress != "" {
+		s.db.QueryRow(
+			` + "`" + `SELECT id FROM user_tokens WHERE user_id = $1 AND mac_address = $2 AND revoked_at IS NULL AND token_type = $3 LIMIT 1` + "`" + `,
+			userID, macAddress, tokenType,
+		).Scan(&existingID)
+	}
+
+	// Fallback: match by user_agent (only if no mac_address was stored)
+	if existingID == 0 {
+		s.db.QueryRow(
+			` + "`" + `SELECT id FROM user_tokens WHERE user_id = $1 AND user_agent = $2 AND mac_address IS NULL AND revoked_at IS NULL AND token_type = $3 LIMIT 1` + "`" + `,
+			userID, userAgent, tokenType,
+		).Scan(&existingID)
+	}
+
+	if existingID != 0 {
+		// Update existing — preserve trust_level, authorized_at, created_at
+		if fcmToken != "" {
+			_, err := s.db.Exec(
+				` + "`" + `UPDATE user_tokens SET jti = $1, token_hash = $2, ip_address = $3, user_agent = $4, mac_address = $5, fcm_token = $6, expires_at = $7, updated_at = NOW() WHERE id = $8` + "`" + `,
+				jti, tokenHash, ipAddress, userAgent, macAddress, fcmToken, expiresAt, existingID,
+			)
+			return err
+		}
+		_, err := s.db.Exec(
+			` + "`" + `UPDATE user_tokens SET jti = $1, token_hash = $2, ip_address = $3, user_agent = $4, mac_address = $5, expires_at = $6, updated_at = NOW() WHERE id = $7` + "`" + `,
+			jti, tokenHash, ipAddress, userAgent, macAddress, expiresAt, existingID,
+		)
+		return err
+	}
+
+	// No existing session found — insert new
+	_, err := s.db.Exec(
+		` + "`" + `INSERT INTO user_tokens (user_id, jti, token_hash, token_type, ip_address, user_agent, mac_address, fcm_token, expires_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())` + "`" + `,
+		userID, jti, tokenHash, tokenType, ipAddress, userAgent, macAddress, fcmToken, expiresAt,
+	)
+	return err
+}
+
+// EnsureActive checks that a token is valid, not revoked, and not expired.
 func (s *TokenStore) EnsureActive(jti, tokenType string) error {
 	var revokedAt sql.NullTime
 	var expiresAt time.Time
@@ -374,17 +953,18 @@ func (s *TokenStore) EnsureActive(jti, tokenType string) error {
 	return nil
 }
 
+// FindActiveRefreshByHash retrieves a non-revoked refresh token record.
 func (s *TokenStore) FindActiveRefreshByHash(tokenHash string) (*TokenRecord, error) {
 	var rec TokenRecord
 	var revokedAt sql.NullTime
 	err := s.db.QueryRow(
-		` + "`" + `SELECT ut.user_id, u.email, ut.jti, ut.token_type, ut.expires_at, ut.revoked_at
+		` + "`" + `SELECT ut.user_id, ut.jti, ut.token_type, ut.expires_at, ut.revoked_at
 		 FROM user_tokens ut
 		 JOIN users u ON u.id = ut.user_id
 		 WHERE ut.token_hash = $1 AND ut.token_type = $2 AND u.is_active = true
 		 LIMIT 1` + "`" + `,
 		tokenHash, TokenTypeRefresh,
-	).Scan(&rec.UserID, &rec.Email, &rec.JTI, &rec.TokenType, &rec.ExpiresAt, &revokedAt)
+	).Scan(&rec.UserID, &rec.JTI, &rec.TokenType, &rec.ExpiresAt, &revokedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -394,11 +974,13 @@ func (s *TokenStore) FindActiveRefreshByHash(tokenHash string) (*TokenRecord, er
 	return &rec, nil
 }
 
+// RevokeJTI marks a token as revoked.
 func (s *TokenStore) RevokeJTI(jti string) error {
 	_, err := s.db.Exec(` + "`" + `UPDATE user_tokens SET revoked_at = COALESCE(revoked_at, $1) WHERE jti = $2` + "`" + `, time.Now(), jti)
 	return err
 }
 
+// RotateRefresh marks the old token as revoked and records the replacement.
 func (s *TokenStore) RotateRefresh(oldJTI, newJTI string) error {
 	_, err := s.db.Exec(
 		` + "`" + `UPDATE user_tokens SET revoked_at = COALESCE(revoked_at, $1), replaced_by_jti = $2
@@ -406,6 +988,245 @@ func (s *TokenStore) RotateRefresh(oldJTI, newJTI string) error {
 		time.Now(), newJTI, oldJTI, TokenTypeRefresh,
 	)
 	return err
+}
+`
+}
+
+func authHandlerGo(mod string) string {
+	return fmt.Sprintf(`package auth
+
+import (
+	"database/sql"
+	"net/http"
+	"strings"
+
+	"github.com/go-playground/validator/v10"
+
+	"%s/internal/config"
+	"%s/internal/shared"
+	"%s/internal/user"
+)
+
+// Handler handles authentication-related HTTP requests.
+type Handler struct {
+	userService user.ServiceInterface
+	cfg         *config.Config
+	tokenStore  *TokenStore
+	validate    *validator.Validate
+}
+
+// NewHandler constructs a new Handler.
+func NewHandler(db *sql.DB, userService user.ServiceInterface, cfg *config.Config) *Handler {
+	return &Handler{
+		userService: userService,
+		cfg:         cfg,
+		tokenStore:  NewTokenStore(db),
+		validate:    validator.New(),
+	}
+}
+
+// Register handles POST /auth/register
+//
+// @Summary Register a new user
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body user.RegisterRequest true "Registration payload"
+// @Success 201 {object} map[string]any
+// @Failure 400 {object} map[string]string
+// @Router /auth/register [post]
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req user.RegisterRequest
+	if !shared.DecodeJSON(w, r, &req) {
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		shared.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	u, err := h.userService.Register(req)
+	if err != nil {
+		shared.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	shared.WriteJSON(w, http.StatusCreated, map[string]any{"user": u.ToResponse()})
+}
+
+// Login handles POST /auth/login
+//
+// @Summary Authenticate a user
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body user.LoginRequest true "Login payload"
+// @Success 200 {object} auth.TokenPair
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/login [post]
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req user.LoginRequest
+	if !shared.DecodeJSON(w, r, &req) {
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		shared.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	u, err := h.userService.Authenticate(req.Email, req.Password)
+	if err != nil {
+		shared.WriteError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	tokens, accessClaims, refreshClaims, err := GenerateTokenPair(u.ID, h.cfg)
+	if err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to generate tokens")
+		return
+	}
+
+	ipAddress := r.RemoteAddr
+	userAgent := r.UserAgent()
+
+	// Upsert device session for refresh token (preserves trust level)
+	if err := h.tokenStore.UpsertDeviceSession(u.ID, HashToken(tokens.RefreshToken), refreshClaims.ID, TokenTypeRefresh, ipAddress, userAgent, req.MacAddress, req.FCMToken, refreshClaims.ExpiresAt.Time); err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to store refresh token")
+		return
+	}
+
+	// Store access token
+	if err := h.tokenStore.Store(accessClaims, HashToken(tokens.AccessToken), ipAddress, userAgent, req.MacAddress, req.FCMToken); err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to store access token")
+		return
+	}
+
+	shared.WriteJSON(w, http.StatusOK, tokens)
+}
+
+// Refresh handles POST /auth/refresh
+//
+// @Summary Refresh access token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body user.RefreshRequest true "Refresh payload"
+// @Success 200 {object} auth.TokenPair
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/refresh [post]
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req user.RefreshRequest
+	if !shared.DecodeJSON(w, r, &req) {
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		shared.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	claims, err := ParseToken(req.RefreshToken, h.cfg)
+	if err != nil || claims.TokenType != TokenTypeRefresh {
+		shared.WriteError(w, http.StatusUnauthorized, "invalid refresh token")
+		return
+	}
+
+	record, err := h.tokenStore.FindActiveRefreshByHash(HashToken(req.RefreshToken))
+	if err != nil || record.JTI != claims.ID || record.UserID != claims.UserID {
+		shared.WriteError(w, http.StatusUnauthorized, "refresh token revoked or expired")
+		return
+	}
+
+	tokens, accessClaims, refreshClaims, err := GenerateTokenPair(claims.UserID, h.cfg)
+	if err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to generate tokens")
+		return
+	}
+
+	ipAddress := r.RemoteAddr
+	userAgent := r.UserAgent()
+
+	// Upsert device session for the new refresh token
+	if err := h.tokenStore.UpsertDeviceSession(claims.UserID, HashToken(tokens.RefreshToken), refreshClaims.ID, TokenTypeRefresh, ipAddress, userAgent, req.MacAddress, req.FCMToken, refreshClaims.ExpiresAt.Time); err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to store refresh token")
+		return
+	}
+
+	// Store new access token
+	if err := h.tokenStore.Store(accessClaims, HashToken(tokens.AccessToken), ipAddress, userAgent, req.MacAddress, req.FCMToken); err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to store access token")
+		return
+	}
+
+	// Revoke old refresh token
+	if err := h.tokenStore.RotateRefresh(claims.ID, refreshClaims.ID); err != nil {
+		shared.WriteError(w, http.StatusInternalServerError, "failed to rotate refresh token")
+		return
+	}
+
+	shared.WriteJSON(w, http.StatusOK, tokens)
+}
+
+// Logout handles POST /auth/logout
+//
+// @Summary Logout and revoke tokens
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body user.LogoutRequest true "Logout payload"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /auth/logout [post]
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// Revoke access token by parsing it from the Authorization header
+	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+	if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+		if claims, err := ParseToken(parts[1], h.cfg); err == nil {
+			_ = h.tokenStore.RevokeJTI(claims.ID)
+		}
+	}
+	// Also revoke the refresh token from request body
+	var req user.LogoutRequest
+	if shared.DecodeJSON(w, r, &req) && req.RefreshToken != "" {
+		if claims, err := ParseToken(req.RefreshToken, h.cfg); err == nil && claims.TokenType == TokenTypeRefresh {
+			_ = h.tokenStore.RevokeJTI(claims.ID)
+		}
+	}
+	shared.WriteJSON(w, http.StatusOK, map[string]string{"message": "logout successful"})
+}
+`, mod, mod, mod)
+}
+
+func authDocsGo() string {
+	return `// Package auth provides API-level documentation for Swaggo/swagger.
+//
+// @Title drp API
+// @Description API generated by drp-go-cli
+// @Version 1.0
+// @Host localhost:8080
+// @BasePath /
+package auth
+`
+}
+
+func docsGo() string {
+	return `// Package docs Code generated by drp-go-cli. DO NOT EDIT.
+// This file is a stub — run 'swag init' to regenerate.
+package docs
+
+import "github.com/swaggo/swag"
+
+// SwaggerInfo holds the swagger specification.
+var SwaggerInfo = &swag.Spec{
+	Version:          "1.0",
+	Host:             "localhost:8080",
+	BasePath:         "/",
+	Schemes:          []string{},
+	Title:            "drp API",
+	Description:      "API generated by drp-go-cli",
+}
+
+func init() {
+	swag.Register(SwaggerInfo.InstanceName(), SwaggerInfo)
 }
 `
 }
@@ -422,16 +1243,11 @@ import (
 
 	"%s/internal/auth"
 	"%s/internal/config"
+	"%s/internal/shared"
 )
 
-type contextKey string
-
-const (
-	UserIDKey contextKey = "user_id"
-	UserEmailKey contextKey = "user_email"
-	TokenJTIKey contextKey = "token_jti"
-)
-
+// Auth returns middleware that verifies the Bearer token and enriches the
+// request context with user_id and token_jti.
 func Auth(cfg *config.Config, db *sql.DB, next http.Handler) http.Handler {
 	tokenStore := auth.NewTokenStore(db)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -452,395 +1268,501 @@ func Auth(cfg *config.Config, db *sql.DB, next http.Handler) http.Handler {
 		}
 
 		ctx := r.Context()
-		ctx = context.WithValue(ctx, UserIDKey, claims.UserID)
-		ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
-		ctx = context.WithValue(ctx, TokenJTIKey, claims.ID)
+		ctx = context.WithValue(ctx, shared.UserIDKey, claims.UserID)
+		ctx = context.WithValue(ctx, shared.TokenJTIKey, claims.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func UserID(r *http.Request) (int64, bool) {
-	id, ok := r.Context().Value(UserIDKey).(int64)
-	return id, ok
-}
-
-func UserEmail(r *http.Request) (string, bool) {
-	email, ok := r.Context().Value(UserEmailKey).(string)
-	return email, ok
-}
-
-func TokenJTI(r *http.Request) (string, bool) {
-	jti, ok := r.Context().Value(TokenJTIKey).(string)
-	return jti, ok
-}
-
 func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
-}
-`, mod, mod)
-}
-
-func authUserModelGo() string {
-	return `package models
-
-import "time"
-
-type User struct {
-	ID int64 ` + "`json:\"id\"`" + `
-	Name string ` + "`json:\"name\"`" + `
-	Email string ` + "`json:\"email\"`" + `
-	PasswordHash string ` + "`json:\"-\"`" + `
-	IsActive bool ` + "`json:\"is_active\"`" + `
-	CreatedAt time.Time ` + "`json:\"created_at\"`" + `
-	UpdatedAt time.Time ` + "`json:\"updated_at\"`" + `
-}
-
-type UserResponse struct {
-	ID int64 ` + "`json:\"id\"`" + `
-	Name string ` + "`json:\"name\"`" + `
-	Email string ` + "`json:\"email\"`" + `
-	IsActive bool ` + "`json:\"is_active\"`" + `
-}
-
-type RegisterRequest struct {
-	Name string ` + "`json:\"name\"`" + `
-	Email string ` + "`json:\"email\"`" + `
-	Password string ` + "`json:\"password\"`" + `
-}
-
-type LoginRequest struct {
-	Email string ` + "`json:\"email\"`" + `
-	Password string ` + "`json:\"password\"`" + `
-}
-
-type RefreshRequest struct {
-	RefreshToken string ` + "`json:\"refresh_token\"`" + `
-}
-
-type LogoutRequest struct {
-	RefreshToken string ` + "`json:\"refresh_token\"`" + `
-}
-
-func (u *User) Response() UserResponse {
-	return UserResponse{ID: u.ID, Name: u.Name, Email: u.Email, IsActive: u.IsActive}
-}
-`
-}
-
-func authUserRepositoryGo(mod string) string {
-	return fmt.Sprintf(`package repositories
-
-import (
-	"database/sql"
-	"errors"
-
-	"%s/internal/models"
-)
-
-type UserRepository struct {
-	db *sql.DB
-}
-
-func NewUserRepository(db *sql.DB) *UserRepository {
-	return &UserRepository{db: db}
-}
-
-func (r *UserRepository) Create(u *models.User) error {
-	return r.db.QueryRow(
-		`+"`"+`INSERT INTO users (name, email, password_hash, is_active, created_at, updated_at)
-		 VALUES ($1, $2, $3, true, NOW(), NOW())
-		 RETURNING id, is_active, created_at, updated_at`+"`"+`,
-		u.Name, u.Email, u.PasswordHash,
-	).Scan(&u.ID, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
-}
-
-func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
-	return r.find(`+"`"+`SELECT id, name, email, password_hash, is_active, created_at, updated_at FROM users WHERE email = $1 LIMIT 1`+"`"+`, email)
-}
-
-func (r *UserRepository) FindByID(id int64) (*models.User, error) {
-	return r.find(`+"`"+`SELECT id, name, email, password_hash, is_active, created_at, updated_at FROM users WHERE id = $1 LIMIT 1`+"`"+`, id)
-}
-
-func (r *UserRepository) find(query string, arg any) (*models.User, error) {
-	var u models.User
-	err := r.db.QueryRow(query, arg).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
-`, mod)
-}
-
-func authUserServiceGo(mod string) string {
-	return fmt.Sprintf(`package services
-
-import (
-	"database/sql"
-	"errors"
-	"fmt"
-	"strings"
-
-	"golang.org/x/crypto/bcrypt"
-
-	"%s/internal/models"
-	"%s/internal/repositories"
-)
-
-type UserService struct {
-	repo *repositories.UserRepository
-}
-
-func NewUserService(repo *repositories.UserRepository) *UserService {
-	return &UserService{repo: repo}
-}
-
-func (s *UserService) Register(req models.RegisterRequest) (*models.User, error) {
-	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" || req.Email == "" || len(req.Password) < 8 {
-		return nil, fmt.Errorf("name, valid email, and password with at least 8 characters are required")
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-
-	u := &models.User{Name: req.Name, Email: req.Email, PasswordHash: string(hash)}
-	if err := s.repo.Create(u); err != nil {
-		return nil, err
-	}
-	return u, nil
-}
-
-func (s *UserService) Authenticate(email, password string) (*models.User, error) {
-	u, err := s.repo.FindByEmail(strings.TrimSpace(strings.ToLower(email)))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("invalid credentials")
-		}
-		return nil, err
-	}
-	if !u.IsActive {
-		return nil, fmt.Errorf("user is inactive")
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return nil, fmt.Errorf("invalid credentials")
-	}
-	return u, nil
-}
-
-func (s *UserService) FindByID(id int64) (*models.User, error) {
-	return s.repo.FindByID(id)
-}
-`, mod, mod)
-}
-
-func authHandlerGo(mod string) string {
-	return fmt.Sprintf(`package handlers
-
-import (
-	"database/sql"
-	"encoding/json"
-	"net/http"
-
-	"%s/internal/auth"
-	"%s/internal/config"
-	"%s/internal/middleware"
-	"%s/internal/models"
-	"%s/internal/repositories"
-	"%s/internal/services"
-)
-
-// AuthHandler handles authentication-related HTTP requests.
-type AuthHandler struct {
-	users *services.UserService
-	cfg   *config.Config
-	tokenStore *auth.TokenStore
-}
-
-// NewAuthHandler constructs a new AuthHandler.
-func NewAuthHandler(db *sql.DB, cfg *config.Config) *AuthHandler {
-	repo := repositories.NewUserRepository(db)
-	return &AuthHandler{users: services.NewUserService(repo), cfg: cfg, tokenStore: auth.NewTokenStore(db)}
-}
-
-// Register handles POST /auth/register
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	var req models.RegisterRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	user, err := h.users.Register(req)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"user": user.Response()})
-}
-
-// Login handles POST /auth/login
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	var req models.LoginRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	user, err := h.users.Authenticate(req.Email, req.Password)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid credentials")
-		return
-	}
-	tokens, accessClaims, refreshClaims, err := auth.GenerateTokenPair(user, h.cfg)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate token")
-		return
-	}
-	if err := h.storeTokenPair(r, tokens, accessClaims, refreshClaims); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store token")
-		return
-	}
-	writeJSON(w, http.StatusOK, tokens)
-}
-
-// Refresh handles POST /auth/refresh
-func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	var req models.RefreshRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	claims, err := auth.ParseToken(req.RefreshToken, h.cfg)
-	if err != nil || claims.TokenType != auth.TokenTypeRefresh {
-		writeError(w, http.StatusUnauthorized, "invalid refresh token")
-		return
-	}
-
-	record, err := h.tokenStore.FindActiveRefreshByHash(auth.HashToken(req.RefreshToken))
-	if err != nil || record.JTI != claims.ID || record.UserID != claims.UserID {
-		writeError(w, http.StatusUnauthorized, "refresh token revoked or expired")
-		return
-	}
-
-	user := &models.User{ID: claims.UserID, Email: record.Email, IsActive: true}
-	tokens, accessClaims, refreshClaims, err := auth.GenerateTokenPair(user, h.cfg)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate token")
-		return
-	}
-	if err := h.storeTokenPair(r, tokens, accessClaims, refreshClaims); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store token")
-		return
-	}
-	if err := h.tokenStore.RotateRefresh(claims.ID, refreshClaims.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to rotate refresh token")
-		return
-	}
-	writeJSON(w, http.StatusOK, tokens)
-}
-
-// Logout handles POST /auth/logout
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	if jti, ok := middleware.TokenJTI(r); ok {
-		_ = h.tokenStore.RevokeJTI(jti)
-	}
-	var req models.LogoutRequest
-	if json.NewDecoder(r.Body).Decode(&req) == nil && req.RefreshToken != "" {
-		if claims, err := auth.ParseToken(req.RefreshToken, h.cfg); err == nil && claims.TokenType == auth.TokenTypeRefresh {
-			_ = h.tokenStore.RevokeJTI(claims.ID)
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"message": "logout successful"})
-}
-
-func (h *AuthHandler) storeTokenPair(r *http.Request, tokens *auth.TokenPair, accessClaims, refreshClaims *auth.Claims) error {
-	ipAddress := r.RemoteAddr
-	userAgent := r.UserAgent()
-	if err := h.tokenStore.Store(accessClaims, auth.HashToken(tokens.AccessToken), ipAddress, userAgent); err != nil {
-		return err
-	}
-	return h.tokenStore.Store(refreshClaims, auth.HashToken(tokens.RefreshToken), ipAddress, userAgent)
-}
-`, mod, mod, mod, mod, mod, mod)
-}
-
-func authUserHandlerGo(mod string) string {
-	return fmt.Sprintf(`package handlers
-
-import (
-	"net/http"
-
-	"%s/internal/middleware"
-	"%s/internal/repositories"
-	"%s/internal/services"
-
-	"database/sql"
-)
-
-// UserHandler handles user-related HTTP requests.
-type UserHandler struct {
-	users *services.UserService
-}
-
-// NewUserHandler constructs a new UserHandler.
-func NewUserHandler(db *sql.DB) *UserHandler {
-	repo := repositories.NewUserRepository(db)
-	return &UserHandler{users: services.NewUserService(repo)}
-}
-
-// Me handles GET /me — returns the authenticated user's profile.
-func (h *UserHandler) Me(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserID(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "authorization required")
-		return
-	}
-	user, err := h.users.FindByID(id)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "user not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, user.Response())
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 `, mod, mod, mod)
 }
 
-func authHandlerHelpersGo() string {
-	return `package handlers
+func corsMiddlewareGo(mod string) string {
+	return fmt.Sprintf(`package middleware
+
+import (
+	"net/http"
+
+	"%s/internal/config"
+)
+
+// CORS wraps a handler with configurable CORS headers.
+func CORS(cfg *config.Config, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// Allow all origins if "*" is configured
+		if len(cfg.CORSOrigins) == 1 && cfg.CORSOrigins[0] == "*" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else {
+			for _, allowed := range cfg.CORSOrigins {
+				if allowed == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+		}
+
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+`, mod)
+}
+
+func requestIDMiddlewareGo(mod string) string {
+	return fmt.Sprintf(`package middleware
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"net/http"
+
+	"%s/internal/shared"
+)
+
+// RequestID wraps a handler and ensures every request has an X-Request-ID header.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			b := make([]byte, 16)
+			rand.Read(b)
+			id = hex.EncodeToString(b)
+		}
+		w.Header().Set("X-Request-ID", id)
+		ctx := context.WithValue(r.Context(), shared.RequestIDKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+`, mod)
+}
+
+func rateLimiterGo() string {
+	return `package middleware
+
+import (
+	"sync"
+	"time"
+
+	"golang.org/x/time/rate"
+)
+
+// IPRateLimiter implements a per-IP token bucket rate limiter.
+type IPRateLimiter struct {
+	mu    sync.RWMutex
+	ips   map[string]*rate.Limiter
+	r     rate.Limit
+	burst int
+}
+
+// NewIPRateLimiter creates a new IPRateLimiter.
+func NewIPRateLimiter(r rate.Limit, burst int) *IPRateLimiter {
+	rl := &IPRateLimiter{
+		ips:   make(map[string]*rate.Limiter),
+		r:     r,
+		burst: burst,
+	}
+	go rl.cleanup()
+	return rl
+}
+
+// Allow reports whether a request from the given IP should be allowed.
+func (l *IPRateLimiter) Allow(ip string) bool {
+	l.mu.RLock()
+	limiter, exists := l.ips[ip]
+	l.mu.RUnlock()
+	if !exists {
+		l.mu.Lock()
+		limiter = rate.NewLimiter(l.r, l.burst)
+		l.ips[ip] = limiter
+		l.mu.Unlock()
+	}
+	return limiter.Allow()
+}
+
+func (l *IPRateLimiter) cleanup() {
+	for {
+		time.Sleep(10 * time.Minute)
+		l.mu.Lock()
+		for ip, limiter := range l.ips {
+			if limiter.Tokens() == float64(l.burst) {
+				delete(l.ips, ip)
+			}
+		}
+		l.mu.Unlock()
+	}
+}
+`
+}
+
+func rateLimitMiddlewareGo() string {
+	return `package middleware
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 )
 
-// decodeJSON decodes the JSON request body into dest.
-// It writes a 400 error and returns false on failure.
-func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
-	defer r.Body.Close()
-	if err := json.NewDecoder(r.Body).Decode(dest); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return false
+// RateLimit returns middleware that enforces per-IP rate limits.
+func RateLimit(rl *IPRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := r.RemoteAddr
+			if host, _, err := net.SplitHostPort(ip); err == nil {
+				ip = host
+			}
+			if !rl.Allow(ip) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				json.NewEncoder(w).Encode(map[string]string{"error": "rate limit exceeded"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
-	return true
-}
-
-// writeJSON encodes v as JSON and writes it with the given HTTP status.
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-// writeError writes a JSON error response.
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
 }
 `
+}
+
+func userRepositoryTestGo() string {
+	return `package user
+
+import (
+	"database/sql"
+	"testing"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
+)
+
+func setupTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	_, err = db.Exec(` + "`" + `CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		email TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL,
+		is_active INTEGER NOT NULL DEFAULT 1,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)` + "`" + `)
+	require.NoError(t, err)
+	return db
+}
+
+func insertTestUser(t *testing.T, db *sql.DB, name, email, passwordHash string) int64 {
+	t.Helper()
+	res, err := db.Exec(
+		` + "`" + `INSERT INTO users (name, email, password_hash, is_active, created_at, updated_at)
+		 VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)` + "`" + `,
+		name, email, passwordHash,
+	)
+	require.NoError(t, err)
+	id, err := res.LastInsertId()
+	require.NoError(t, err)
+	return id
+}
+
+func TestRepository_FindByEmail(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	id := insertTestUser(t, db, "Alice", "alice@example.com", "hash")
+	require.True(t, id > 0)
+
+	u, err := repo.FindByEmail("alice@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "Alice", u.Name)
+	require.Equal(t, "alice@example.com", u.Email)
+}
+
+func TestRepository_FindByID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	id := insertTestUser(t, db, "Bob", "bob@example.com", "hash")
+
+	u, err := repo.FindByID(id)
+	require.NoError(t, err)
+	require.Equal(t, "Bob", u.Name)
+	require.Equal(t, "bob@example.com", u.Email)
+}
+`
+}
+
+func userServiceTestGo() string {
+	return `package user
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+)
+
+type mockRepository struct {
+	mock.Mock
+}
+
+func (m *mockRepository) Create(u *User) error {
+	args := m.Called(u)
+	return args.Error(0)
+}
+
+func (m *mockRepository) FindByEmail(email string) (*User, error) {
+	args := m.Called(email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*User), args.Error(1)
+}
+
+func (m *mockRepository) FindByID(id int64) (*User, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*User), args.Error(1)
+}
+
+func TestService_Register_Success(t *testing.T) {
+	mockRepo := new(mockRepository)
+	svc := NewService(mockRepo)
+
+	req := RegisterRequest{
+		Name:     "Alice",
+		Email:    "alice@example.com",
+		Password: "SecurePass1",
+	}
+
+	mockRepo.On("Create", mock.AnythingOfType("*user.User")).Return(nil).Once()
+
+	u, err := svc.Register(req)
+	require.NoError(t, err)
+	require.NotNil(t, u)
+	require.Equal(t, "alice@example.com", u.Email)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_Register_WeakPassword(t *testing.T) {
+	mockRepo := new(mockRepository)
+	svc := NewService(mockRepo)
+
+	tests := []struct {
+		password string
+		wantErr  string
+	}{
+		{"short", "password must be at least 8 characters"},
+		{"alllowercase1", "password must contain an uppercase letter"},
+		{"ALLUPPERCASE1", "password must contain a lowercase letter"},
+		{"NoDigitsHere", "password must contain a digit"},
+	}
+	for _, tt := range tests {
+		_, err := svc.Register(RegisterRequest{
+			Name: "Test", Email: "test@test.com", Password: tt.password,
+		})
+		require.ErrorContains(t, err, tt.wantErr)
+	}
+}
+
+func TestService_Authenticate_Success(t *testing.T) {
+	mockRepo := new(mockRepository)
+	svc := NewService(mockRepo)
+
+	u := &User{
+		Name:         "Alice",
+		Email:        "alice@example.com",
+		PasswordHash: "$2a$10$dummyhash",
+		IsActive:     true,
+	}
+
+	mockRepo.On("FindByEmail", "alice@example.com").Return(u, nil).Once()
+
+	result, err := svc.Authenticate("Alice@Example.com", "anypass")
+	if err != nil {
+		require.ErrorContains(t, err, "invalid credentials")
+		_ = result
+	} else {
+		require.NotNil(t, result)
+	}
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_Authenticate_UserNotFound(t *testing.T) {
+	mockRepo := new(mockRepository)
+	svc := NewService(mockRepo)
+
+	mockRepo.On("FindByEmail", "missing@example.com").Return(nil, errors.New("not found")).Once()
+
+	_, err := svc.Authenticate("missing@example.com", "pass")
+	require.Error(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_FindByID(t *testing.T) {
+	mockRepo := new(mockRepository)
+	svc := NewService(mockRepo)
+
+	u := &User{Name: "Bob", Email: "bob@example.com"}
+	mockRepo.On("FindByID", int64(42)).Return(u, nil).Once()
+
+	result, err := svc.FindByID(42)
+	require.NoError(t, err)
+	require.Equal(t, "Bob", result.Name)
+	mockRepo.AssertExpectations(t)
+}
+`
+}
+
+func authHandlerTestGo(mod string) string {
+	return fmt.Sprintf(`package auth
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	"%s/internal/config"
+	"%s/internal/user"
+)
+
+type mockUserService struct {
+	mock.Mock
+}
+
+func (m *mockUserService) Register(req user.RegisterRequest) (*user.User, error) {
+	args := m.Called(req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*user.User), args.Error(1)
+}
+
+func (m *mockUserService) Authenticate(email, password string) (*user.User, error) {
+	args := m.Called(email, password)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*user.User), args.Error(1)
+}
+
+func (m *mockUserService) FindByID(id int64) (*user.User, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*user.User), args.Error(1)
+}
+
+func newTestHandler(svc user.ServiceInterface) *Handler {
+	return &Handler{
+		userService: svc,
+		validate:    validator.New(),
+		cfg: &config.Config{
+			JWTSecret:               "test-secret-that-is-long-enough-for-testing",
+			AccessTokenExpiryMinutes: 15,
+			RefreshTokenExpiryDays:   30,
+		},
+	}
+}
+
+func TestHandler_Register_InvalidBody(t *testing.T) {
+	h := newTestHandler(nil)
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader([]byte(` + "`" + `{invalid}` + "`" + `)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Register(rr, req)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestHandler_Register_ValidationError(t *testing.T) {
+	h := newTestHandler(nil)
+	body := user.RegisterRequest{Name: "A", Email: "bad-email", Password: "short"}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(body)
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Register(rr, req)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestHandler_Register_ServiceError(t *testing.T) {
+	mockSvc := new(mockUserService)
+	h := newTestHandler(mockSvc)
+
+	mockSvc.On("Register", mock.AnythingOfType("user.RegisterRequest")).
+		Return(nil, errors.New("service error")).Once()
+
+	body := user.RegisterRequest{Name: "Alice", Email: "alice@example.com", Password: "SecurePass1"}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(body)
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Register(rr, req)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	mockSvc.AssertExpectations(t)
+}
+
+func TestHandler_Login_ValidationError(t *testing.T) {
+	h := newTestHandler(nil)
+	body := user.LoginRequest{Email: "", Password: ""}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(body)
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestHandler_Login_InvalidCredentials(t *testing.T) {
+	mockSvc := new(mockUserService)
+	h := newTestHandler(mockSvc)
+
+	mockSvc.On("Authenticate", "alice@example.com", "wrong").
+		Return(nil, errors.New("invalid credentials")).Once()
+
+	body := user.LoginRequest{Email: "alice@example.com", Password: "wrong"}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(body)
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	mockSvc.AssertExpectations(t)
+}
+`, mod, mod)
 }
 
 func authRoutesGo(mod string) string {
@@ -850,54 +1772,85 @@ import (
 	"database/sql"
 	"net/http"
 
+	"golang.org/x/time/rate"
+
+	"%s/internal/auth"
 	"%s/internal/config"
-	"%s/internal/handlers"
 	"%s/internal/middleware"
+	"%s/internal/user"
 )
 
-func Register(mux *http.ServeMux, db *sql.DB, cfg *config.Config) {
-	authHandler := handlers.NewAuthHandler(db, cfg)
-	userHandler := handlers.NewUserHandler(db)
+// RegisterAuthRoutes wires all auth and user routes onto the mux.
+func RegisterAuthRoutes(mux *http.ServeMux, db *sql.DB, cfg *config.Config) {
+	userRepo := user.NewRepository(db)
+	userSvc := user.NewService(userRepo)
+	authHandler := auth.NewHandler(db, userSvc, cfg)
+	userHandler := user.NewHandler(userSvc)
 
-	// Auth routes
-	mux.HandleFunc("POST /auth/register", authHandler.Register)
-	mux.HandleFunc("POST /auth/login", authHandler.Login)
-	mux.HandleFunc("POST /auth/refresh", authHandler.Refresh)
+	// Rate limiting for auth endpoints
+	var authRateLimit func(http.Handler) http.Handler
+	if cfg.RateLimitEnabled {
+		rl := middleware.NewIPRateLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst)
+		authRateLimit = middleware.RateLimit(rl)
+	} else {
+		authRateLimit = func(next http.Handler) http.Handler { return next }
+	}
+
+	// Auth routes (with rate limiting on mutation endpoints)
+	mux.Handle("POST /auth/register", authRateLimit(http.HandlerFunc(authHandler.Register)))
+	mux.Handle("POST /auth/login", authRateLimit(http.HandlerFunc(authHandler.Login)))
+	mux.Handle("POST /auth/refresh", authRateLimit(http.HandlerFunc(authHandler.Refresh)))
 	mux.Handle("POST /auth/logout", middleware.Auth(cfg, db, http.HandlerFunc(authHandler.Logout)))
 
 	// User routes
 	mux.Handle("GET /me", middleware.Auth(cfg, db, http.HandlerFunc(userHandler.Me)))
 }
-`, mod, mod, mod)
+`, mod, mod, mod, mod)
 }
 
-func authUsersMigrationUp() string {
-	return `CREATE TABLE IF NOT EXISTS users (
-  id BIGSERIAL PRIMARY KEY,
+func authUsersMigrationUp(drv string) string {
+	idType := "BIGSERIAL"
+	refType := "BIGINT"
+	tsType := "TIMESTAMPTZ"
+	nowVal := "NOW()"
+	if drv == "mysql" {
+		idType = "BIGINT UNSIGNED AUTO_INCREMENT"
+		refType = "BIGINT UNSIGNED"
+		tsType = "DATETIME(6)"
+		nowVal = "CURRENT_TIMESTAMP(6)"
+	}
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS users (
+  id %s PRIMARY KEY,
   name VARCHAR(120) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at %s NOT NULL DEFAULT %s,
+  updated_at %s NOT NULL DEFAULT %s
 );
 
 CREATE TABLE IF NOT EXISTS user_tokens (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id %s PRIMARY KEY,
+  user_id %s NOT NULL,
   jti VARCHAR(96) NOT NULL UNIQUE,
   token_hash CHAR(64) NOT NULL UNIQUE,
   token_type VARCHAR(20) NOT NULL,
   ip_address VARCHAR(64),
   user_agent VARCHAR(255),
-  expires_at TIMESTAMPTZ NOT NULL,
-  revoked_at TIMESTAMPTZ,
+  mac_address VARCHAR(64),
+  fcm_token TEXT,
+  trust_level VARCHAR(20) NOT NULL DEFAULT 'pending',
+  authorized_at %s,
+  expires_at %s NOT NULL,
+  revoked_at %s,
   replaced_by_jti VARCHAR(96),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at %s NOT NULL DEFAULT %s,
+  updated_at %s NOT NULL DEFAULT %s
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_tokens_user_id ON user_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_tokens_token_type ON user_tokens(token_type);
 CREATE INDEX IF NOT EXISTS idx_user_tokens_expires_at ON user_tokens(expires_at);
-`
+CREATE INDEX IF NOT EXISTS idx_user_tokens_mac_address ON user_tokens(mac_address);
+`, idType, tsType, nowVal, tsType, nowVal, idType, refType, tsType, tsType, tsType, tsType, nowVal, tsType, nowVal)
 }
