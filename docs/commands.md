@@ -1,6 +1,7 @@
 # Commands Reference
 
-Complete reference for every `drp` command.
+Complete reference for every `drp` command, organised in the order you'd
+typically use them during a project lifecycle.
 
 **Global flags** (apply to all commands):
 
@@ -12,7 +13,148 @@ Complete reference for every `drp` command.
 
 ---
 
-## `drp init`
+## 1. Setup & Self-Management
+
+Commands for installing, upgrading, and getting information about `drp`
+itself. Run these once to set up your toolchain.
+
+### `drp install`
+
+Install the current binary as `drp` (copies itself into `~/.local/bin/`
+or a custom directory).
+
+```
+drp install [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--bin-dir <path>` | `~/.local/bin` | Directory to install drp into |
+| `--no-shell` | `false` | Do not update shell profile PATH |
+
+#### Examples
+
+```bash
+drp install
+drp install --bin-dir /usr/local/bin
+```
+
+---
+
+### `drp upgrade`
+
+Download the latest (or a specific) `drp` release from GitHub and replace
+the current binary.
+
+```
+drp upgrade [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--repo <owner/name>` | `DarpanAdhikari/drp-go-cli` | GitHub repository to fetch from |
+| `--bin-dir <path>` | _(current dir or ~/.local/bin)_ | Directory containing drp |
+| `--asset-url <url>` | — | Direct release asset URL (for testing) |
+| `--version <tag>` | _(latest)_ | Specific version to install, e.g. `v0.1.0` |
+
+`--version` and `--asset-url` cannot be used together.
+
+#### Examples
+
+```bash
+drp upgrade                          # latest stable
+drp upgrade --version v0.2.0         # specific version
+```
+
+---
+
+### `drp rollback`
+
+Restore the previous `drp` binary from the `.old` backup left behind by
+`drp upgrade` or `drp install`.
+
+```
+drp rollback
+```
+
+No flags. Run if the latest upgrade introduced a problem.
+
+---
+
+### `drp version`
+
+Print the current `drp` CLI version.
+
+```
+drp version
+```
+
+### `drp version:check`
+
+Check whether a newer `drp` release is available on GitHub.
+
+```
+drp version:check
+```
+
+Compares the running version against the latest GitHub release tag and
+suggests `drp upgrade` if a newer version exists.
+
+---
+
+### `drp completion`
+
+Generate shell auto-completion scripts for bash, zsh, fish, or PowerShell.
+
+```
+drp completion [bash|zsh|fish|powershell]
+```
+
+#### Examples — enable completion
+
+```bash
+# Bash — source for current session
+source <(drp completion bash)
+
+# Bash — permanent
+drp completion bash | sudo tee /etc/bash_completion.d/drp
+
+# Zsh — permanent
+drp completion zsh > "${fpath[1]}/_drp"
+```
+
+---
+
+## 2. Environment & Diagnostics
+
+### `drp doctor`
+
+Check your environment for common DRP setup issues.
+
+```
+drp doctor
+```
+
+Checks performed (all run even if an earlier one fails):
+
+- Go installation and version
+- Presence and parseability of `.env`
+- Required `.env` variables (`DB_USER`, `DB_NAME`)
+- Database reachability (connect + ping)
+- Expected project directory structure
+
+#### Examples
+
+```bash
+drp doctor
+drp doctor --env-file .env.test
+```
+
+---
+
+## 3. Project Scaffolding
+
+### `drp init`
 
 Scaffold a new DRP-backed Go project.
 
@@ -20,14 +162,24 @@ Scaffold a new DRP-backed Go project.
 drp init [project-name] [flags]
 ```
 
-### Flags
-
 | Flag | Default | Description |
 |---|---|---|
 | `--module <path>` | _(project name)_ | Go module path (e.g. `github.com/acme/myapp`) |
+| `--auth` | `true` | Scaffold JWT auth, users, token handling, and auth routes |
+| `--infra <components>` | `""` (none) | Generate infrastructure files: `all`, `docker`, `ci`, `make`, `lint` (comma-separated) |
+| `--driver <driver>` | `postgres` | Database driver: `postgres` or `mysql` |
 | `--force` | `false` | Overwrite a non-empty directory |
+| `--no-interaction` | `false` | Skip interactive prompts |
 
-### What it generates (base)
+> **`--auth` defaults to `true`.** Pass `--auth=false` to skip the auth preset.
+
+> **`--infra`** accepts `"all"` for everything, or a comma-separated list
+> like `"docker,ci"` for specific components.
+
+> **`--driver`** controls DSN format, migration SQL syntax, and default
+> ports (5432 for postgres, 3306 for mysql).
+
+#### What it generates (base)
 
 ```
 <project-name>/
@@ -44,7 +196,10 @@ drp init [project-name] [flags]
 └── README.md
 ```
 
-### With `--auth`
+A `GET /healthz` endpoint is always generated (uses `database/sql.Ping()`
+on every request).
+
+#### With `--auth`
 
 ```
 <project-name>/
@@ -68,58 +223,126 @@ drp init [project-name] [flags]
 └── README.md
 ```
 
-> **Note:** The generated `internal/config/config.go` is a standalone file —
-> it does **not** import the `drp` package at runtime.
+#### With `--infra`
 
-### Examples
+Depending on the components selected, additional files are generated:
+
+| Component | Files |
+|---|---|
+| `docker` | `docker/Dockerfile`, `.dockerignore`, `docker-compose.yml` |
+| `ci` | `.github/workflows/ci.yml` (Go CI workflow) |
+| `make` | `Makefile` (build, test, lint, run targets) |
+| `lint` | `.editorconfig`, `.golangci.yml` |
+
+#### Examples
 
 ```bash
-# Basic usage
+# Basic usage (interactive prompts)
 drp init myapp
+
+# Skip interactive prompts
+drp init myapp --no-interaction
 
 # With authentication preset
 drp init myapp --auth
 
+# Skip auth (bare project only)
+drp init myapp --auth=false
+
 # Custom Go module path
 drp init myapp --module github.com/acme/myapp
 
+# MySQL driver
+drp init myapp --driver mysql
+
+# All infrastructure files
+drp init myapp --infra all
+
+# Docker + CI only
+drp init myapp --infra docker,ci
+
 # Re-scaffold into an existing directory
 drp init myapp --force
+
+# Full non-interactive example
+drp init myapp --no-interaction --auth --infra docker,ci --driver postgres
 ```
+
+After creation, `drp` automatically runs `git init` in the new project
+directory.
 
 ---
 
-## `drp doctor`
+### `drp create:crud`
 
-Check your environment for common DRP setup issues.
+Generate all CRUD layers for a resource inside the current project directory.
 
 ```
-drp doctor
+drp create:crud [name] [flags]
 ```
 
-Checks performed (all run even if an earlier one fails):
+| Flag | Short | Default | Description |
+|---|---|---|---|
+| `--model` | `-m` | `false` | Generate model only |
+| `--repository` | `-r` | `false` | Generate repository only |
+| `--service` | `-s` | `false` | Generate service only |
+| `--handler` | — | `false` | Generate handler only |
+| `--routes` | — | `false` | Generate routes only |
+| `--module <path>` | — | _(auto-detected)_ | Override Go module name |
+| `--no-interaction` | — | `false` | Skip interactive prompts (implies all layers) |
 
-- Go installation and version
-- Presence and parseability of `.env`
-- Required `.env` variables (`DB_USER`, `DB_NAME`)
-- Database reachability (connect + ping)
-- Expected project directory structure
+When no layer flags are given and `--no-interaction` is not set, `drp`
+enters **interactive mode**:
 
-### Examples
+1. Asks which layers to generate (checkboxes)
+2. Shows a preview of files that will be created
+3. Asks for confirmation before writing
+
+With no layer flags in non-interactive mode, all five files are generated:
+
+```
+internal/<domain>/model.go
+internal/<domain>/repository.go
+internal/<domain>/service.go
+internal/<domain>/handler.go
+internal/routes/<domain>_routes.go
+```
+
+All four domain layers share the same package — no cross-package imports
+between model, repository, service, and handler.
+
+#### Examples
 
 ```bash
-drp doctor
-drp doctor --env-file .env.test
+# Interactive mode (recommended)
+drp create:crud product
+
+# Generate all layers non-interactively
+drp create:crud product --no-interaction
+
+# Generate only the model and repository
+drp create:crud product -m -r
+
+# Specify module explicitly
+drp create:crud product --module github.com/acme/myapp
+```
+
+After generation, register the routes in `cmd/api/main.go`:
+
+```go
+routes.RegisterProductRoutes(mux, db)
 ```
 
 ---
 
-## Migration Commands
+## 4. Database Commands
 
-All migration commands read `database/migrations/` and connect to the
+All database commands read `database/migrations/` and connect to the
 database configured in `.env`.
 
-### `drp migrate` / `drp migrate:up`
+### 4a. Migrations
+
+#### `drp migrate` / `drp migrate:up`
 
 Run all pending (not yet applied) migrations.
 
@@ -128,17 +351,22 @@ drp migrate
 drp migrate:up
 ```
 
-Both commands are equivalent. Prints an info message if there is nothing to run.
+Both commands are equivalent. Prints an info message if there is nothing
+to run.
 
 ---
 
-### `drp migrate:create`
+#### `drp migrate:create`
 
 Create a new timestamped migration file pair (up + down).
 
 ```
-drp migrate:create [name]
+drp migrate:create [name] [flags]
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--table <name>` | _(inferred)_ | Table name to use in starter SQL |
 
 Creates two files in `database/migrations/`:
 
@@ -152,12 +380,12 @@ database/migrations/
 
 ```bash
 drp migrate:create create_users_table
-drp migrate:create add_email_to_orders
+drp migrate:create add_email_to_orders --table orders
 ```
 
 ---
 
-### `drp migrate:down`
+#### `drp migrate:down`
 
 Roll back the single most-recently applied migration.
 
@@ -171,9 +399,10 @@ drp migrate:down [flags]
 
 ---
 
-### `drp migrate:rollback`
+#### `drp migrate:rollback`
 
-Roll back the **entire last batch** of migrations (all that ran together in the last `migrate:up` call).
+Roll back the **entire last batch** of migrations (all that ran together
+in the last `migrate:up` call).
 
 ```
 drp migrate:rollback [flags]
@@ -185,9 +414,9 @@ drp migrate:rollback [flags]
 
 ---
 
-### `drp migrate:fresh`
+#### `drp migrate:fresh`
 
-Drop **all tables**, then re-run all migrations from scratch. Equivalent to `db:reset`.
+Drop **all tables**, then re-run all migrations from scratch.
 
 ```
 drp migrate:fresh [flags]
@@ -201,7 +430,7 @@ drp migrate:fresh [flags]
 
 ---
 
-### `drp migrate:status`
+#### `drp migrate:status`
 
 Show which migrations have been applied and which are still pending.
 
@@ -219,20 +448,24 @@ Output example:
 
 ---
 
-### `drp migrate:seed`
+#### `drp migrate:seed`
 
-Run all pending migrations, then immediately run the database seeders.
+Run pending migrations, then immediately run the database seeders.
 Shortcut for `migrate:up` followed by `db:seed`.
 
 ```
-drp migrate:seed
+drp migrate:seed [flags]
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--fresh` | `false` | Drop all tables, re-run migrations, then re-run all seeders |
 
 ---
 
-## Seeder Commands
+### 4b. Seeders
 
-### `drp seeder:create`
+#### `drp seeder:create`
 
 Create a new seeder SQL file in `database/seeders/`.
 
@@ -251,7 +484,24 @@ Creates: `database/seeders/<name>.sql`
 
 ---
 
-### `drp db:seed`
+#### `drp seeder:status`
+
+Show which seeders have run and which are pending.
+
+```
+drp seeder:status
+```
+
+Output example:
+
+```
+  ✔  users
+  ✗  products   (pending)
+```
+
+---
+
+#### `drp db:seed`
 
 Run the database seeders.
 
@@ -261,13 +511,13 @@ drp db:seed [flags]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--fresh` | `false` | Clear seed history and re-run **all** seeders |
+| `--fresh` | `false` | Drop all tables, re-run migrations, then re-run **all** seeders from scratch |
 
 ---
 
-## Database Commands
+### 4c. Database Utilities
 
-### `drp db:status`
+#### `drp db:status`
 
 Show the current database connection status and basic info.
 
@@ -283,7 +533,7 @@ Output example:
 
 ---
 
-### `drp db:tables`
+#### `drp db:tables`
 
 List all tables currently in the configured database.
 
@@ -293,7 +543,7 @@ drp db:tables
 
 ---
 
-### `drp db:drop`
+#### `drp db:drop`
 
 Drop **all tables** in the configured database.
 
@@ -309,9 +559,10 @@ drp db:drop [flags]
 
 ---
 
-### `drp db:reset`
+#### `drp db:reset`
 
-Drop all tables and re-run all migrations from scratch (alias for `migrate:fresh`).
+Drop all tables and re-run all migrations from scratch (alias for
+`migrate:fresh`).
 
 ```
 drp db:reset [flags]
@@ -323,64 +574,42 @@ drp db:reset [flags]
 
 ---
 
-## Code Generation
+## 5. Development Workflow
 
-### `drp create:crud`
+### `drp run`
 
-Generate all CRUD layers for a resource inside the current project directory.
-
-```
-drp create:crud [name] [flags]
-```
-
-With no layer flags, **all five files** are generated (domain-based layout):
+Run a Go command from `./cmd/<target>`.
 
 ```
-internal/<domain>/model.go
-internal/<domain>/repository.go
-internal/<domain>/service.go
-internal/<domain>/handler.go
-internal/routes/<domain>_routes.go
+drp run [target] [args...] [flags]
 ```
 
-All four domain layers share the same package — no cross-package imports
-between model, repository, service, and handler. For example, `drp create:crud product`
-creates `internal/product/model.go`, `internal/product/repository.go`, etc.,
-all under `package product`.
+Target is required (e.g. `api`, `worker`).
 
-Use layer flags to generate specific files only:
-
-| Flag | Short | Description |
-|---|---|---|
-| `--model` | `-m` | Generate model only |
-| `--repository` | `-r` | Generate repository only |
-| `--service` | `-s` | Generate service only |
-| `--handler` | — | Generate handler only |
-| `--routes` | — | Generate routes only |
-| `--module <path>` | — | Override Go module name (auto-detected from `go.mod` by default) |
+| Flag | Short | Default | Description |
+|---|---|---|---|
+| `--watch` | `-w` | `false` | Watch for changes in `.go` and `.env` files and auto-restart |
 
 #### Examples
 
 ```bash
-# Generate all layers for "product"
-drp create:crud product
-
-# Generate only the model and repository
-drp create:crud product -m -r
-
-# Specify module explicitly
-drp create:crud product --module github.com/acme/myapp
+drp run api
+drp run api --watch
+drp run worker
 ```
 
-After generation, register the routes in `cmd/api/main.go`:
+With `--watch`, `drp` monitors all `.go` files (excluding `.git/`,
+`tmp/`, `node_modules/`, `database/`) and `.env` for changes and
+restarts the process. The watch mode:
 
-```go
-routes.RegisterProductRoutes(mux, db)
-```
+- Polls every 800ms for file modifications
+- Debounces multiple changes into a single restart
+- Gracefully stops the old process before starting the new one
+- Waits for the port to become free before restarting
 
 ---
 
-## `drp test`
+### `drp test`
 
 Run all project tests. Runs `go mod tidy` then `go test ./...`.
 
@@ -388,24 +617,22 @@ Run all project tests. Runs `go mod tidy` then `go test ./...`.
 drp test [flags]
 ```
 
-### Flags
+| Flag | Short | Default | Description |
+|---|---|---|---|
+| `--verbose` | `-v` | `false` | Verbose output (each test name) |
+| `--cover` | — | `false` | Include coverage report |
 
-| Flag | Default | Description |
-|---|---|---|
-| `-v, --verbose` | `false` | Verbose output (each test name) |
-| `--cover` | `false` | Include coverage report |
-
-### Examples
+#### Examples
 
 ```bash
 drp test          # compact output
 drp test -v       # verbose
-drp test -cover   # with coverage
+drp test --cover   # with coverage
 ```
 
 ---
 
-## `drp build`
+### `drp build`
 
 Compile a production binary from `./cmd/<target>`.
 
@@ -415,13 +642,11 @@ drp build [target] [flags]
 
 Target defaults to `"api"` (builds `./cmd/api`).
 
-### Flags
+| Flag | Short | Default | Description |
+|---|---|---|---|
+| `--output <path>` | `-o` | `./dist/<target>` | Custom output path |
 
-| Flag | Default | Description |
-|---|---|---|
-| `-o, --output <path>` | `./dist/<target>` | Custom output path |
-
-### Examples
+#### Examples
 
 ```bash
 drp build            # builds ./cmd/api → ./dist/api
@@ -431,7 +656,7 @@ drp build -o myapp   # builds ./cmd/api → ./myapp
 
 ---
 
-## `drp docs:generate`
+### `drp docs:generate`
 
 Regenerate swagger documentation. Parses all Swaggo annotations
 (`@Summary`, `@Router`, `@Param`, etc.) and produces full
@@ -445,29 +670,3 @@ drp docs:generate
 
 > Run this after adding or modifying handler annotations to keep your
 > API documentation in sync with the code.
-
----
-
-## Other Commands
-
-### `drp version`
-
-Print the current DRP CLI version.
-
-```
-drp version
-```
-
-### `drp completion`
-
-Generate shell auto-completion scripts (bash, zsh, fish, PowerShell).
-
-```
-drp completion [bash|zsh|fish|powershell]
-```
-
-#### Example — enable bash completion
-
-```bash
-drp completion bash > /etc/bash_completion.d/drp
-```

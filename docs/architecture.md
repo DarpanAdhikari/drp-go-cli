@@ -17,10 +17,22 @@ drp/
 │   ├── init.go              ← drp init
 │   ├── doctor.go            ← drp doctor
 │   ├── migrate.go           ← drp migrate, migrate:up/down/create/rollback/fresh/status/seed
-│   ├── seeder.go            ← drp seeder:create, db:seed
+│   ├── rollback.go          ← drp rollback (restore .old binary)
+│   ├── seeder.go            ← drp seeder:create, seeder:status, db:seed
 │   ├── db.go                ← drp db:status/tables/drop/reset
 │   ├── create.go            ← drp create:crud
-│   └── version.go           ← drp version
+│   ├── run.go               ← drp run [target] (with --watch)
+│   ├── run_unix.go          ← unix process management (linux + darwin)
+│   ├── run_windows.go       ← windows process management
+│   ├── build.go             ← drp build [target]
+│   ├── test.go              ← drp test
+│   ├── docs.go              ← drp docs:generate
+│   ├── completion.go        ← drp completion [bash|zsh|fish|powershell]
+│   ├── install.go           ← drp install
+│   ├── upgrade.go           ← drp upgrade
+│   ├── version.go           ← drp version, version:check
+│   └── drp/
+│       └── main.go          ← program entry point
 │
 ├── internal/                ← all business logic (unexported to the outside world)
 │   ├── config/              ← .env loading and validation
