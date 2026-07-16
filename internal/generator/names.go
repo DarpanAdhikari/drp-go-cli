@@ -16,15 +16,25 @@ type Names struct {
 	RouteName  string // kebab-case:   "product-categories"
 	DomainName string // snake_case singular: "product_category"
 	ModuleName string // from go.mod:  "github.com/yourorg/myapp"
+	DBDriver   string // "postgres" or "mysql"
 }
 
 // NewNames derives all name variants from a raw resource name (e.g. "product"
 // or "product_category") and the project's Go module name.
 func NewNames(raw, moduleName string) Names {
+	return NewNamesWithDriver(raw, moduleName, "postgres")
+}
+
+// NewNamesWithDriver is like NewNames but also accepts a DB driver name.
+func NewNamesWithDriver(raw, moduleName, dbDriver string) Names {
 	snake := toSnake(raw)
 	pascal := toPascal(snake)
 	plural := naivePlural(pascal)
 	tableSnake := toSnake(naivePluralSnake(snake))
+
+	if dbDriver == "" {
+		dbDriver = "postgres"
+	}
 
 	return Names{
 		Name:       pascal,
@@ -34,6 +44,7 @@ func NewNames(raw, moduleName string) Names {
 		RouteName:  strings.ReplaceAll(tableSnake, "_", "-"),
 		DomainName: snake,
 		ModuleName: moduleName,
+		DBDriver:   dbDriver,
 	}
 }
 

@@ -117,6 +117,7 @@ func Project(opts ProjectOptions) error {
 		filepath.Join(root, "internal", "routes"),
 		filepath.Join(root, "internal", "shared"),
 		filepath.Join(root, "internal", "user"),
+		filepath.Join(root, "tests"),
 		filepath.Join(root, "docs"),
 		filepath.Join(root, "database", "migrations"),
 		filepath.Join(root, "database", "seeders"),

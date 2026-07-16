@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // CRUDOptions configures what `drp create:crud` generates.
@@ -19,6 +20,11 @@ type CRUDOptions struct {
 	Repository bool
 	Service    bool
 	Routes     bool
+	Migration  bool
+	Seeder     bool
+
+	// DBDriver selects the SQL dialect for migrations ("postgres" or "mysql").
+	DBDriver string
 
 	// DryRun returns the file list without writing anything.
 	DryRun bool
@@ -26,7 +32,8 @@ type CRUDOptions struct {
 
 // allLayers reports whether the options mean "generate everything".
 func (o CRUDOptions) allLayers() bool {
-	return !o.Model && !o.Handler && !o.Repository && !o.Service && !o.Routes
+	return !o.Model && !o.Handler && !o.Repository && !o.Service && !o.Routes &&
+		!o.Migration && !o.Seeder
 }
 
 // layer groups a template name with dynamic output directory and filename.
@@ -37,11 +44,12 @@ type layer struct {
 	enabled      func(CRUDOptions) bool
 }
 
-// blueprintLayers defines the generated project's internal directory structure.
-// Model, repository, service, and handler are placed under internal/<domain>/
-// to match the domain-based layout used by drp init --auth.
-// Routes remain in internal/routes/ with a domain prefix to avoid collisions.
+// blueprintLayers defines all files the CRUD generator can produce.
+// Source layers go under internal/<domain>/, tests under tests/<domain>/,
+// migrations under database/migrations/, seeders under database/seeders/,
+// and routes under internal/routes/.
 var blueprintLayers = []layer{
+	// ── Source layers ──────────────────────────────────────────────
 	{
 		templateName: "model.tpl",
 		dirFunc:      func(n Names) string { return filepath.Join("internal", n.DomainName) },
@@ -72,6 +80,58 @@ var blueprintLayers = []layer{
 		fileFunc:     func(n Names) string { return n.DomainName + "_routes.go" },
 		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Routes },
 	},
+
+	// ── Database migration & seeder layers ─────────────────────────
+	{
+		templateName: "migration_up.tpl",
+		dirFunc:      func(Names) string { return filepath.Join("database", "migrations") },
+		fileFunc:     func(n Names) string { return fmt.Sprintf("%s_create_%s_table.up.sql", timestamp(), n.TableName) },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Migration },
+	},
+	{
+		templateName: "migration_down.tpl",
+		dirFunc:      func(Names) string { return filepath.Join("database", "migrations") },
+		fileFunc:     func(n Names) string { return fmt.Sprintf("%s_create_%s_table.down.sql", timestamp(), n.TableName) },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Migration },
+	},
+	{
+		templateName: "seeder.tpl",
+		dirFunc:      func(Names) string { return filepath.Join("database", "seeders") },
+		fileFunc:     func(n Names) string { return fmt.Sprintf("%s_seed_%s.sql", timestamp(), n.TableName) },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Seeder },
+	},
+
+	// ── Test layers (root tests/<domain>/) ─────────────────────────
+	{
+		templateName: "model_test.tpl",
+		dirFunc:      func(n Names) string { return filepath.Join("tests", n.DomainName) },
+		fileFunc:     func(Names) string { return "model_test.go" },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Model },
+	},
+	{
+		templateName: "repository_test.tpl",
+		dirFunc:      func(n Names) string { return filepath.Join("tests", n.DomainName) },
+		fileFunc:     func(Names) string { return "repository_test.go" },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Repository },
+	},
+	{
+		templateName: "service_test.tpl",
+		dirFunc:      func(n Names) string { return filepath.Join("tests", n.DomainName) },
+		fileFunc:     func(Names) string { return "service_test.go" },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Service },
+	},
+	{
+		templateName: "handler_test.tpl",
+		dirFunc:      func(n Names) string { return filepath.Join("tests", n.DomainName) },
+		fileFunc:     func(Names) string { return "handler_test.go" },
+		enabled:      func(o CRUDOptions) bool { return o.allLayers() || o.Handler },
+	},
+}
+
+// timestamp returns the current UTC time as YYYYMMDDHHmmss for use in
+// migration and seeder filenames.
+func timestamp() string {
+	return time.Now().UTC().Format("20060102150405")
 }
 
 // CRUD generates the requested layer files for a resource under the current
@@ -82,7 +142,7 @@ func CRUD(opts CRUDOptions) ([]string, error) {
 		return nil, fmt.Errorf("crud: resource name cannot be empty")
 	}
 
-	names := NewNames(opts.RawName, opts.ModuleName)
+	names := NewNamesWithDriver(opts.RawName, opts.ModuleName, opts.DBDriver)
 	renderer := NewRenderer()
 	var files []string
 

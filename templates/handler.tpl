@@ -9,11 +9,11 @@ import (
 
 // {{.Name}}Handler handles HTTP requests for the {{.Name}} resource.
 type {{.Name}}Handler struct {
-	service *{{.Name}}Service
+	service {{.Name}}ServiceInterface
 }
 
 // New{{.Name}}Handler constructs a new {{.Name}}Handler.
-func New{{.Name}}Handler(service *{{.Name}}Service) *{{.Name}}Handler {
+func New{{.Name}}Handler(service {{.Name}}ServiceInterface) *{{.Name}}Handler {
 	return &{{.Name}}Handler{service: service}
 }
 

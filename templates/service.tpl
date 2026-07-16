@@ -2,13 +2,25 @@ package {{.DomainName}}
 
 import "fmt"
 
+// {{.Name}}ServiceInterface defines the contract for {{.Name}} business logic.
+type {{.Name}}ServiceInterface interface {
+	GetAll() ([]{{.Name}}, error)
+	GetByID(id int64) (*{{.Name}}, error)
+	Create(m *{{.Name}}) (*{{.Name}}, error)
+	Update(m *{{.Name}}) (*{{.Name}}, error)
+	Delete(id int64) error
+}
+
+// Compile-time check that *{{.Name}}Service satisfies {{.Name}}ServiceInterface.
+var _ {{.Name}}ServiceInterface = (*{{.Name}}Service)(nil)
+
 // {{.Name}}Service contains business logic for {{.Name}} operations.
 type {{.Name}}Service struct {
-	repo *{{.Name}}Repository
+	repo {{.Name}}RepositoryInterface
 }
 
 // New{{.Name}}Service constructs a new {{.Name}}Service.
-func New{{.Name}}Service(repo *{{.Name}}Repository) *{{.Name}}Service {
+func New{{.Name}}Service(repo {{.Name}}RepositoryInterface) *{{.Name}}Service {
 	return &{{.Name}}Service{repo: repo}
 }
 

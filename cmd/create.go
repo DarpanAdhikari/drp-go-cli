@@ -9,26 +9,36 @@ import (
 
 var createCrudCmd = &cobra.Command{
 	Use:   "create:crud [name]",
-	Short: "Generate model/handler/repository/service/routes files for a resource",
+	Short: "Generate model/handler/repository/service/routes/migration/seeder/test files for a resource",
 	Long: `Generates all CRUD layers for a resource under the current project directory.
 
 Run without any layer flags to enter interactive mode (recommended):
   drp create:crud products
 
 With specific flags (non-interactive):
-  -m   model only
-  -r   repository only
-  -s   service only
+  -m          model only
+  -r          repository only
+  -s          service only
   --handler   handler only
   --routes    routes only
+  --migration migration SQL (up + down) only
+  --seeder    seeder SQL only
   --no-interaction   skip interactive prompts (implies all layers)
+  --driver    database driver: postgres (default) or mysql
 
 Generated files (domain-based layout):
   internal/<domain>/model.go
   internal/<domain>/repository.go
   internal/<domain>/service.go
   internal/<domain>/handler.go
-  internal/routes/<domain>_routes.go`,
+  internal/routes/<domain>_routes.go
+  database/migrations/<ts>_create_<table>_table.up.sql
+  database/migrations/<ts>_create_<table>_table.down.sql
+  database/seeders/<ts>_seed_<table>.sql
+  tests/<domain>/model_test.go
+  tests/<domain>/repository_test.go
+  tests/<domain>/service_test.go
+  tests/<domain>/handler_test.go`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
 		module, _ := c.Flags().GetString("module")
@@ -60,7 +70,10 @@ Generated files (domain-based layout):
 		svc, _ := c.Flags().GetBool("service")
 		handler, _ := c.Flags().GetBool("handler")
 		routes, _ := c.Flags().GetBool("routes")
-		anyFlag := model || repo || svc || handler || routes
+		migration, _ := c.Flags().GetBool("migration")
+		seeder, _ := c.Flags().GetBool("seeder")
+		driver, _ := c.Flags().GetString("driver")
+		anyFlag := model || repo || svc || handler || routes || migration || seeder
 
 		if !anyFlag && !noInt {
 			if !output.IsTTY() {
@@ -70,6 +83,8 @@ Generated files (domain-based layout):
 				svc = true
 				handler = true
 				routes = true
+				migration = true
+				seeder = true
 			} else {
 				selections, err := interactive.CRUDLayerSelection(args[0])
 				if err != nil {
@@ -82,6 +97,11 @@ Generated files (domain-based layout):
 				svc = selections.Service
 				handler = selections.Handler
 				routes = selections.Routes
+				migration = selections.Migration
+				seeder = selections.Seeder
+				if selections.Driver != "" {
+					driver = selections.Driver
+				}
 			}
 		} else if !anyFlag {
 			model = true
@@ -89,6 +109,12 @@ Generated files (domain-based layout):
 			svc = true
 			handler = true
 			routes = true
+			migration = true
+			seeder = true
+		}
+
+		if driver == "" {
+			driver = "postgres"
 		}
 
 		opts := generator.CRUDOptions{
@@ -99,6 +125,9 @@ Generated files (domain-based layout):
 			Service:    svc,
 			Handler:    handler,
 			Routes:     routes,
+			Migration:  migration,
+			Seeder:     seeder,
+			DBDriver:   driver,
 		}
 
 		if !noInt && !anyFlag && output.IsTTY() {
@@ -153,6 +182,9 @@ func init() {
 	// NOTE: -h conflicts with Cobra's built-in --help shorthand; long flag only.
 	createCrudCmd.Flags().Bool("handler", false, "Generate handler only")
 	createCrudCmd.Flags().Bool("routes", false, "Generate routes only")
+	createCrudCmd.Flags().Bool("migration", false, "Generate migration SQL (up + down) only")
+	createCrudCmd.Flags().Bool("seeder", false, "Generate seeder SQL only")
 	createCrudCmd.Flags().String("module", "", "Go module name (auto-detected from go.mod if not set)")
+	createCrudCmd.Flags().String("driver", "postgres", "Database driver: postgres or mysql")
 	createCrudCmd.Flags().Bool("no-interaction", false, "Skip interactive prompts (implies all layers)")
 }

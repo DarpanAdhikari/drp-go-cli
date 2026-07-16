@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+// {{.Name}}RepositoryInterface defines the contract for {{.TableName}} storage.
+type {{.Name}}RepositoryInterface interface {
+	FindAll() ([]{{.Name}}, error)
+	FindByID(id int64) (*{{.Name}}, error)
+	Create(m *{{.Name}}) (*{{.Name}}, error)
+	Update(m *{{.Name}}) (*{{.Name}}, error)
+	Delete(id int64) error
+}
+
+// Compile-time check that *{{.Name}}Repository satisfies {{.Name}}RepositoryInterface.
+var _ {{.Name}}RepositoryInterface = (*{{.Name}}Repository)(nil)
+
 // {{.Name}}Repository handles all database operations for {{.Name}}.
 type {{.Name}}Repository struct {
 	db *sql.DB

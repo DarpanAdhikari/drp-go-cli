@@ -221,6 +221,56 @@ Three commands wrap common Go tasks so users don't need to remember raw Go CLI:
 github.com/go-sql-driver/mysql v1.8.1  # only when --driver mysql
 ```
 
+## Phase 4 (Session 4) — Complete ✅
+
+### Features shipped
+
+1. **Missing migration + seeder in CRUD** — `drp create:crud` now generates:
+   - `database/migrations/<ts>_create_<table>_table.up.sql`
+   - `database/migrations/<ts>_create_<table>_table.down.sql`
+   - `database/seeders/<ts>_seed_<table>.sql`
+   - Enabled by default (all layers); controllable via `--migration`/`--seeder` flags and interactive prompt
+
+2. **Driver-aware CRUD migrations** — `migration_up.tpl` and `seeder.tpl` use `{{if eq .DBDriver "mysql"}}` to generate PostgreSQL vs MySQL-compatible SQL (BIGSERIAL vs BIGINT UNSIGNED AUTO_INCREMENT, TIMESTAMPTZ vs DATETIME(6), NOW() vs CURRENT_TIMESTAMP(6)). Controlled by `--driver` flag (default: postgres) or interactive prompt.
+
+3. **Interface-based layers** — `repository.tpl`, `service.tpl`, and `handler.tpl` now generate `RepositoryInterface` / `ServiceInterface` types with compile-time satisfaction checks, enabling mock injection in tests. Pattern matches auth-generated code.
+
+4. **Test generation in `tests/<domain>/`** — CRUD auto-generates 4 test files per domain:
+   - `tests/<domain>/model_test.go` — struct field assertions
+   - `tests/<domain>/repository_test.go` — SQLite in-memory CRUD tests with `testify/require`
+   - `tests/<domain>/service_test.go` — mock-based service tests with `testify/mock`
+   - `tests/<domain>/handler_test.go` — httptest handler tests with mocked service
+   - Tests use external test packages (`package <domain>_test`), consistent with Go conventions.
+   - Test files auto-enabled when their corresponding layer is selected (no separate flags needed).
+
+5. **`tests/` directory** — `drp init` now creates a root `tests/` directory in the scaffold.
+
+### What changed
+
+| File | Changes |
+|---|---|
+| `internal/generator/names.go` | Added `DBDriver` field to `Names`; added `NewNamesWithDriver()`; `NewNames()` delegates with default "postgres" |
+| `internal/generator/crud.go` | Added `Migration`, `Seeder`, `DBDriver` to `CRUDOptions`; added 12 `blueprintLayers` entries (migration_up, migration_down, seeder + 4 test files); `allLayers()` includes new flags; `CRUD()` uses `NewNamesWithDriver`; added `timestamp()` helper |
+| `internal/generator/embedded/files/repository.tpl` | Added `RepositoryInterface`, compile-time satisfaction check |
+| `internal/generator/embedded/files/service.tpl` | Uses `RepositoryInterface` instead of concrete type; added `ServiceInterface`, compile-time check |
+| `internal/generator/embedded/files/handler.tpl` | Uses `ServiceInterface` instead of concrete type |
+| `internal/generator/embedded/files/migration_up.tpl` | Driver-aware SQL (BIGSERIAL vs BIGINT UNSIGNED, TIMESTAMPTZ vs DATETIME(6)) |
+| `internal/generator/embedded/files/seeder.tpl` | Driver-aware NOW() vs CURRENT_TIMESTAMP(6) |
+| `internal/generator/embedded/files/model_test.tpl` | **New** — struct test template |
+| `internal/generator/embedded/files/repository_test.tpl` | **New** — SQLite repo test with `mattn/go-sqlite3` |
+| `internal/generator/embedded/files/service_test.tpl` | **New** — mock-based service test |
+| `internal/generator/embedded/files/handler_test.tpl` | **New** — httptest handler test |
+| `templates/*.tpl` | Disk copies synced with embedded versions for user overrides |
+| `internal/interactive/prompts.go` | Added `Migration`, `Seeder`, `Driver` to `CRUDSelections`; added driver selector and migration/seeder options to prompt |
+| `cmd/create.go` | Added `--migration`, `--seeder`, `--driver` flags; updated help text |
+| `internal/generator/project.go` | Added `tests/` to scaffold directory list |
+| `internal/generator/crud_test.go` | 14 tests covering all layers, content checks, driver-aware migration content |
+
+### Generated go.mod deps (Phase 4 additions)
+```
+github.com/mattn/go-sqlite3  # test-only, pulled in by go mod tidy when tests are present
+```
+
 ## How to continue
 
 1. Open `internal/generator/auth_preset.go` or `internal/generator/project.go`

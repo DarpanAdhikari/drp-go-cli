@@ -1,0 +1,25 @@
+package middleware
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"net/http"
+
+	"/tmp/test-crud/internal/shared"
+)
+
+// RequestID wraps a handler and ensures every request has an X-Request-ID header.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			b := make([]byte, 16)
+			rand.Read(b)
+			id = hex.EncodeToString(b)
+		}
+		w.Header().Set("X-Request-ID", id)
+		ctx := context.WithValue(r.Context(), shared.RequestIDKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}

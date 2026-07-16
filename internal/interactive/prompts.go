@@ -14,6 +14,9 @@ type CRUDSelections struct {
 	Service    bool
 	Handler    bool
 	Routes     bool
+	Migration  bool
+	Seeder     bool
+	Driver     string
 }
 
 type InitOptions struct {
@@ -120,8 +123,20 @@ func CRUDLayerSelection(resourceName string) (CRUDSelections, error) {
 					huh.NewOption("Service", "service").Selected(true),
 					huh.NewOption("Handler", "handler").Selected(true),
 					huh.NewOption("Routes", "routes").Selected(true),
+					huh.NewOption("Migration (up/down SQL)", "migration").Selected(true),
+					huh.NewOption("Seeder (SQL)", "seeder").Selected(true),
 				).
 				Value(&selected),
+		),
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Database driver").
+				Description("SQL dialect for generated migrations.").
+				Options(
+					huh.NewOption("PostgreSQL", "postgres").Selected(true),
+					huh.NewOption("MySQL", "mysql"),
+				).
+				Value(&selections.Driver),
 		),
 	).
 		WithTheme(huh.ThemeCatppuccin()).
@@ -141,8 +156,10 @@ func CRUDLayerSelection(resourceName string) (CRUDSelections, error) {
 	selections.Service = sel["service"]
 	selections.Handler = sel["handler"]
 	selections.Routes = sel["routes"]
+	selections.Migration = sel["migration"]
+	selections.Seeder = sel["seeder"]
 
-	if !selections.Model && !selections.Repository && !selections.Service && !selections.Handler && !selections.Routes {
+	if !selections.Model && !selections.Repository && !selections.Service && !selections.Handler && !selections.Routes && !selections.Migration && !selections.Seeder {
 		fmt.Fprintln(os.Stderr, "No layers selected. Aborting.")
 		os.Exit(2)
 	}
